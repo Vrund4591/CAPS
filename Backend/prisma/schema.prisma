@@ -1,0 +1,184 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  FACULTY
+  ADMIN
+}
+
+enum Department {
+  IT
+  CE
+}
+
+enum ProjectType {
+  UDP  // University Defined Project
+  IDP  // Industry Defined Project
+}
+
+enum GroupStatus {
+  PENDING     // Waiting for faculty approval
+  APPROVED    // Faculty approved
+  REJECTED    // Faculty rejected
+  ACTIVE      // Currently working
+  COMPLETED   // Project completed
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  password  String
+  name      String
+  role      Role
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Relationships
+  student Student?
+  faculty Faculty?
+  admin   Admin?
+
+  @@map("users")
+}
+
+model Student {
+  id           String @id @default(cuid())
+  userId       String @unique
+  enrollmentNo String @unique
+  class        String
+  division     String
+  semester     Int
+  phoneNumber  String
+
+  // Relationships
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groupMember  GroupMember?
+  achievements Achievement[]
+
+  @@map("students")
+}
+
+model Faculty {
+  id         String     @id @default(cuid())
+  userId     String     @unique
+  department Department
+  
+  // Relationships
+  user   User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  groups Group[]
+
+  @@map("faculty")
+}
+
+model Admin {
+  id     String @id @default(cuid())
+  userId String @unique
+
+  // Relationships
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("admins")
+}
+
+model Group {
+  id          String      @id @default(cuid())
+  groupId     String      @unique // Auto-generated like G1, G2, etc.
+  title       String
+  description String
+  projectType ProjectType
+  frontendTech String?    // Technologies for frontend
+  backendTech  String?    // Technologies for backend
+  status      GroupStatus @default(PENDING)
+  teamLeaderId String     // Student ID who created the group
+  facultyId   String
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+
+  // Relationships
+  faculty Faculty       @relation(fields: [facultyId], references: [id])
+  members GroupMember[]
+  projectIdeas ProjectIdea[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id        String @id @default(cuid())
+  studentId String @unique // One student can only be in one group
+  groupId   String
+  isLeader  Boolean @default(false)
+  joinedAt  DateTime @default(now())
+
+  // Relationships
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  group   Group   @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([studentId, groupId])
+  @@map("group_members")
+}
+
+model ProjectIdea {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  tags        String[] // Array of technology tags
+  difficulty  String   // Easy, Medium, Hard
+  groupId     String?  // If a group has picked up this idea
+  isApproved  Boolean  @default(false)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  // Relationships
+  group Group? @relation(fields: [groupId], references: [id])
+
+  @@map("project_ideas")
+}
+
+model Achievement {
+  id          String   @id @default(cuid())
+  title       String
+  description String
+  badgeIcon   String   // URL or icon identifier
+  studentId   String
+  earnedAt    DateTime @default(now())
+
+  // Relationships
+  student Student @relation(fields: [studentId], references: [id], onDelete: Cascade)
+
+  @@map("achievements")
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  message   String
+  type      String   // EMAIL, SYSTEM, etc.
+  recipientEmail String
+  isRead    Boolean  @default(false)
+  sentAt    DateTime @default(now())
+
+  @@map("notifications")
+}
+
+// For storing authorized emails/users who can sign up
+model AuthorizedUser {
+  id    String @id @default(cuid())
+  email String @unique
+  role  Role
+  isUsed Boolean @default(false) // To track if this email has been used for signup
+
+  @@map("authorized_users")
+}
