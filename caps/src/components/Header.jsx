@@ -50,10 +50,12 @@ const Header = ({ user, onLogout }) => {
       <div className="container mx-auto px-6 py-4">
         <div className="flex items-center justify-between">
           {/* Logo */}
-          <Link to="/" className="flex items-center space-x-3">
-            <div className="bg-gradient-to-r from-blue-500 to-purple-500 text-white font-black text-2xl px-4 py-2 rounded-2xl border-3 border-black">
-              CAPS
-            </div>
+          <Link to="/" className="flex items-center space-x-">
+            <img
+              src="/caps1.svg"
+              alt="CAPS Logo"
+              className="w-12 h-12"
+            />
           </Link>
 
           {/* Desktop Navigation */}
