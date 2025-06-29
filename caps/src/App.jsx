@@ -55,7 +55,7 @@ function App() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50 flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center" style={{backgroundColor: '#FFFFF4'}}>
         <div className="bg-white p-8 rounded-2xl shadow-lg border-4 border-black">
           <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
           <p className="mt-4 font-bold text-gray-800">Loading CAPS...</p>
@@ -66,7 +66,7 @@ function App() {
 
   return (
     <Router>
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
+      <div className="min-h-screen" style={{backgroundColor: '#FFFFF4'}}>
         <Routes>
           <Route 
             path="/" 

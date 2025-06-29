@@ -1,5 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { 
+  Users, 
+  Clipboard, 
+  Rocket, 
+  Plus, 
+  Zap, 
+  Bell, 
+  Trophy, 
+  Lightbulb,
+  Mail,
+  User,
+  Calendar
+} from 'lucide-react';
 import Header from '../components/Header';
 
 const StudentDashboard = ({ user, onLogout }) => {
@@ -24,7 +37,7 @@ const StudentDashboard = ({ user, onLogout }) => {
           const groupData = await groupResponse.json();
           setMyGroup(groupData.group);
         }
-      } catch (error) {
+      } catch {
         // User doesn't have a group yet
       }
 
@@ -73,8 +86,9 @@ const StudentDashboard = ({ user, onLogout }) => {
       <div className="container mx-auto px-6 py-8">
         {/* Welcome Section */}
         <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black mb-8">
-          <h1 className="text-4xl font-black text-gray-900 mb-2">
-            Welcome back, {user.name}! 👋
+          <h1 className="text-4xl font-black text-gray-900 mb-2 flex items-center gap-3">
+            Welcome back, {user.name}! 
+            <Users className="w-10 h-10 text-blue-500" />
           </h1>
           <p className="text-xl text-gray-600 font-semibold">
             Ready to collaborate on some awesome projects?
@@ -85,8 +99,9 @@ const StudentDashboard = ({ user, onLogout }) => {
           {/* Group Status */}
           <div className="lg:col-span-2">
             <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black">
-              <h2 className="text-2xl font-black text-gray-900 mb-6">
-                📋 Your Group Status
+              <h2 className="text-2xl font-black text-gray-900 mb-6 flex items-center gap-2">
+                <Clipboard className="w-6 h-6 text-blue-500" />
+                Your Group Status
               </h2>
               
               {myGroup ? (
@@ -124,7 +139,9 @@ const StudentDashboard = ({ user, onLogout }) => {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <div className="text-6xl mb-4">🚀</div>
+                  <div className="text-6xl mb-4 flex justify-center">
+                    <Rocket className="w-24 h-24 text-blue-500" />
+                  </div>
                   <h3 className="text-xl font-bold text-gray-700 mb-4">
                     You're not in a group yet!
                   </h3>
@@ -146,36 +163,46 @@ const StudentDashboard = ({ user, onLogout }) => {
           <div className="space-y-8">
             {/* Quick Actions */}
             <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black">
-              <h3 className="text-xl font-black text-gray-900 mb-6">⚡ Quick Actions</h3>
+              <h3 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-2">
+                <Zap className="w-5 h-5 text-yellow-500" />
+                Quick Actions
+              </h3>
               <div className="space-y-4">
                 {!myGroup && (
                   <Link
                     to="/create-group"
-                    className="block bg-green-100 hover:bg-green-200 p-4 rounded-2xl border-3 border-green-500 font-bold text-green-800 text-center transition-colors duration-200"
+                    className="block bg-green-100 hover:bg-green-200 p-4 rounded-2xl border-3 border-green-500 font-bold text-green-800 text-center transition-colors duration-200 flex items-center justify-center gap-2"
                   >
-                    ➕ Create Group
+                    <Plus className="w-5 h-5" />
+                    Create Group
                   </Link>
                 )}
                 {myGroup && (
                   <Link
                     to="/my-group"
-                    className="block bg-blue-100 hover:bg-blue-200 p-4 rounded-2xl border-3 border-blue-500 font-bold text-blue-800 text-center transition-colors duration-200"
+                    className="block bg-blue-100 hover:bg-blue-200 p-4 rounded-2xl border-3 border-blue-500 font-bold text-blue-800 text-center transition-colors duration-200 flex items-center justify-center gap-2"
                   >
-                    👥 My Group
+                    <Users className="w-5 h-5" />
+                    My Group
                   </Link>
                 )}
-                <div className="bg-purple-100 p-4 rounded-2xl border-3 border-purple-500 font-bold text-purple-800 text-center opacity-50">
-                  🏆 Achievements (Coming Soon)
+                <div className="bg-purple-100 p-4 rounded-2xl border-3 border-purple-500 font-bold text-purple-800 text-center opacity-50 flex items-center justify-center gap-2">
+                  <Trophy className="w-5 h-5" />
+                  Achievements (Coming Soon)
                 </div>
-                <div className="bg-orange-100 p-4 rounded-2xl border-3 border-orange-500 font-bold text-orange-800 text-center opacity-50">
-                  💡 Project Ideas (Coming Soon)
+                <div className="bg-orange-100 p-4 rounded-2xl border-3 border-orange-500 font-bold text-orange-800 text-center opacity-50 flex items-center justify-center gap-2">
+                  <Lightbulb className="w-5 h-5" />
+                  Project Ideas (Coming Soon)
                 </div>
               </div>
             </div>
 
             {/* Recent Notifications */}
             <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black">
-              <h3 className="text-xl font-black text-gray-900 mb-6">🔔 Recent Notifications</h3>
+              <h3 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-2">
+                <Bell className="w-5 h-5 text-blue-500" />
+                Recent Notifications
+              </h3>
               <div className="space-y-3">
                 {notifications.length > 0 ? (
                   notifications.map((notification) => (
@@ -194,7 +221,9 @@ const StudentDashboard = ({ user, onLogout }) => {
                   ))
                 ) : (
                   <div className="text-center py-4 text-gray-500">
-                    <div className="text-2xl mb-2">📭</div>
+                    <div className="text-2xl mb-2 flex justify-center">
+                      <Mail className="w-8 h-8" />
+                    </div>
                     <p className="text-sm font-semibold">No notifications yet</p>
                   </div>
                 )}

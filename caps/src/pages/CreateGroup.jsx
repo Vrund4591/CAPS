@@ -1,5 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { 
+  Rocket, 
+  Clipboard, 
+  Monitor, 
+  Users, 
+  User,
+  Plus
+} from 'lucide-react';
 import Header from '../components/Header';
 
 const CreateGroup = ({ user, onLogout }) => {
@@ -46,7 +54,7 @@ const CreateGroup = ({ user, onLogout }) => {
       }
 
     } catch (error) {
-      setError('Failed to load data');
+      setError('Failed to load data: ' + error.message);
     }
   };
 
@@ -100,22 +108,23 @@ const CreateGroup = ({ user, onLogout }) => {
         setError(data.message || 'Failed to create group');
       }
     } catch (error) {
-      setError('Network error. Please try again.');
+      setError(`Network error: ${error.message}. Please try again.`);
     }
 
     setLoading(false);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
+    <div className="min-h-screen" style={{backgroundColor: '#FFFFF4'}}>
       <Header user={user} onLogout={onLogout} />
       
       <div className="container mx-auto px-6 py-8">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-screen mx-auto">
           {/* Header */}
           <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black mb-8">
-            <h1 className="text-4xl font-black text-gray-900 mb-2">
-              🚀 Create New Group
+            <h1 className="text-4xl font-black text-gray-900 mb-2 flex items-center gap-3">
+              <Rocket className="w-10 h-10 text-blue-500" />
+              Create New Group
             </h1>
             <p className="text-xl text-gray-600 font-semibold">
               Start your collaborative journey by forming a project team
@@ -139,7 +148,10 @@ const CreateGroup = ({ user, onLogout }) => {
             <form onSubmit={handleSubmit} className="space-y-8">
               {/* Basic Information */}
               <div className="bg-blue-50 p-6 rounded-2xl border-3 border-blue-500">
-                <h2 className="text-2xl font-black text-blue-900 mb-6">📋 Basic Information</h2>
+                <h2 className="text-2xl font-black text-blue-900 mb-6 flex items-center gap-2">
+                  <Clipboard className="w-6 h-6 text-blue-600" />
+                  Basic Information
+                </h2>
                 
                 <div className="grid md:grid-cols-2 gap-6">
                   <div>
@@ -212,7 +224,10 @@ const CreateGroup = ({ user, onLogout }) => {
 
               {/* Technology Stack */}
               <div className="bg-purple-50 p-6 rounded-2xl border-3 border-purple-500">
-                <h2 className="text-2xl font-black text-purple-900 mb-6">💻 Technology Stack</h2>
+                <h2 className="text-2xl font-black text-purple-900 mb-6 flex items-center gap-2">
+                  <Monitor className="w-6 h-6 text-purple-600" />
+                  Technology Stack
+                </h2>
                 
                 <div className="grid md:grid-cols-2 gap-6">
                   <div>
@@ -247,7 +262,10 @@ const CreateGroup = ({ user, onLogout }) => {
 
               {/* Team Members */}
               <div className="bg-green-50 p-6 rounded-2xl border-3 border-green-500">
-                <h2 className="text-2xl font-black text-green-900 mb-6">👥 Team Members</h2>
+                <h2 className="text-2xl font-black text-green-900 mb-6 flex items-center gap-2">
+                  <Users className="w-6 h-6 text-green-600" />
+                  Team Members
+                </h2>
                 <p className="text-green-700 font-semibold mb-6">
                   Select up to 3 additional team members (You will be the team leader by default)
                 </p>
@@ -282,7 +300,9 @@ const CreateGroup = ({ user, onLogout }) => {
                   </div>
                 ) : (
                   <div className="text-center py-8 text-gray-500">
-                    <div className="text-4xl mb-4">👤</div>
+                    <div className="text-4xl mb-4 flex justify-center">
+                      <User className="w-12 h-12" />
+                    </div>
                     <p className="font-semibold">No available students found</p>
                     <p className="text-sm">All students may already be in groups</p>
                   </div>
@@ -298,9 +318,10 @@ const CreateGroup = ({ user, onLogout }) => {
                 <button
                   type="submit"
                   disabled={loading}
-                  className="bg-blue-500 hover:bg-blue-600 text-white font-black py-4 px-8 rounded-2xl border-3 border-black shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 disabled:opacity-50 disabled:transform-none"
+                  className="bg-blue-500 hover:bg-blue-600 text-white font-black py-4 px-8 rounded-2xl border-3 border-black shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 disabled:opacity-50 disabled:transform-none flex items-center gap-2 justify-center"
                 >
-                  {loading ? 'Creating Group...' : '🚀 Create Group'}
+                  <Rocket className="w-5 h-5" />
+                  {loading ? 'Creating Group...' : 'Create Group'}
                 </button>
               </div>
             </form>

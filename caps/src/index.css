@@ -7,11 +7,15 @@
 
 /* Custom shadows for neubrutalism */
 .shadow-brutal {
-  box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1);
+  box-shadow: 6px 6px 0px 0px rgba(0, 0, 0, 1);
 }
 
 .shadow-brutal-lg {
-  box-shadow: 6px 6px 0px 0px rgba(0, 0, 0, 1);
+  box-shadow: 8px 8px 0px 0px rgba(0, 0, 0, 1);
+}
+
+.shadow-brutal-xl {
+  box-shadow: 12px 12px 0px 0px rgba(0, 0, 0, 1);
 }
 
 /* Smooth animations */
@@ -47,24 +51,38 @@
 
 /* Button hover effects */
 .btn-brutal {
-  @apply font-black py-3 px-6 rounded-2xl border-3 border-black shadow-lg transition-all duration-200;
+  font-weight: 900;
+  padding: 0.75rem 1.5rem;
+  border-radius: 1rem;
+  border-width: 3px;
+  border-color: black;
+  box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .btn-brutal:hover {
-  @apply shadow-xl transform -translate-y-1;
+  box-shadow: 8px 8px 0px 0px rgba(0, 0, 0, 1);
+  transform: translateY(-4px);
 }
 
 .btn-brutal:active {
-  @apply transform translate-y-0 shadow-lg;
+  transform: translateY(0);
+  box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1);
 }
 
 /* Card hover effects */
 .card-brutal {
-  @apply bg-white rounded-3xl shadow-2xl border-4 border-black transition-all duration-200;
+  background-color: white;
+  border-radius: 1.5rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  border-width: 4px;
+  border-color: black;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .card-brutal:hover {
-  @apply shadow-2xl transform -translate-y-1;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  transform: translateY(-4px);
 }
 
 /* Loading animation */
@@ -110,7 +128,7 @@ input[type="password"],
 input[type="tel"],
 select,
 textarea {
-  @apply transition-all duration-200;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 input[type="text"]:focus,
@@ -119,16 +137,17 @@ input[type="password"]:focus,
 input[type="tel"]:focus,
 select:focus,
 textarea:focus {
-  @apply transform scale-105;
+  transform: scale(1.02);
 }
 
 /* Mobile responsiveness */
 @media (max-width: 768px) {
   .card-brutal {
-    @apply shadow-lg;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
   }
   
   .btn-brutal:hover {
-    @apply transform-none shadow-lg;
+    transform: none;
+    box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1);
   }
 }

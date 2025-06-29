@@ -1,5 +1,21 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { 
+  Users, 
+  Rocket, 
+  Clipboard, 
+  Clock, 
+  X, 
+  Crown,
+  User,
+  Mail,
+  Calendar,
+  FileText,
+  MessageCircle,
+  BarChart3,
+  GraduationCap,
+  Zap
+} from 'lucide-react';
 import Header from '../components/Header';
 
 const MyGroup = ({ user, onLogout }) => {
@@ -24,8 +40,8 @@ const MyGroup = ({ user, onLogout }) => {
       } else {
         setError('You are not part of any group yet');
       }
-    } catch (error) {
-      setError('Failed to load group data');
+    } catch (err) {
+      setError(`Failed to load group data: ${err.message}`);
     }
     setLoading(false);
   };
@@ -50,7 +66,7 @@ const MyGroup = ({ user, onLogout }) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
+      <div className="min-h-screen" style={{backgroundColor: '#FFFFF4'}}>
         <Header user={user} onLogout={onLogout} />
         <div className="flex items-center justify-center h-96">
           <div className="bg-white p-8 rounded-2xl shadow-lg border-4 border-black">
@@ -64,13 +80,15 @@ const MyGroup = ({ user, onLogout }) => {
 
   if (error || !group) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
+      <div className="min-h-screen" style={{backgroundColor: '#FFFFF4'}}>
         <Header user={user} onLogout={onLogout} />
         
         <div className="container mx-auto px-6 py-8">
           <div className="max-w-2xl mx-auto">
             <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black text-center">
-              <div className="text-6xl mb-4">🚀</div>
+              <div className="text-6xl mb-4 flex justify-center">
+                <Rocket className="w-24 h-24 text-blue-500" />
+              </div>
               <h1 className="text-3xl font-black text-gray-900 mb-4">No Group Found</h1>
               <p className="text-xl text-gray-600 mb-8">
                 You're not part of any group yet. Create a new group to start collaborating!
@@ -89,17 +107,18 @@ const MyGroup = ({ user, onLogout }) => {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
+    <div className="min-h-screen" style={{backgroundColor: '#FFFFF4'}}>
       <Header user={user} onLogout={onLogout} />
       
       <div className="container mx-auto px-6 py-8">
-        <div className="max-w-4xl mx-auto">
+        <div className="max-w-screen mx-auto">
           {/* Header */}
           <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black mb-8">
             <div className="flex items-center justify-between">
               <div>
-                <h1 className="text-4xl font-black text-gray-900 mb-2">
-                  👥 My Group
+                <h1 className="text-4xl font-black text-gray-900 mb-2 flex items-center gap-3">
+                  <Users className="w-10 h-10 text-blue-500" />
+                  My Group
                 </h1>
                 <p className="text-xl text-gray-600 font-semibold">
                   View your group details and collaboration progress
@@ -114,8 +133,18 @@ const MyGroup = ({ user, onLogout }) => {
           {/* Status Message */}
           {group.status !== 'ACTIVE' && (
             <div className={`p-6 rounded-3xl border-3 mb-8 ${getStatusColor(group.status)}`}>
-              <h3 className="font-black text-lg mb-2">
-                {group.status === 'PENDING' ? '⏳ Waiting for Approval' : '❌ Request Rejected'}
+              <h3 className="font-black text-lg mb-2 flex items-center gap-2">
+                {group.status === 'PENDING' ? (
+                  <>
+                    <Clock className="w-5 h-5" />
+                    Waiting for Approval
+                  </>
+                ) : (
+                  <>
+                    <X className="w-5 h-5" />
+                    Request Rejected
+                  </>
+                )}
               </h3>
               <p className="font-semibold">{getStatusMessage(group.status)}</p>
             </div>
@@ -126,7 +155,10 @@ const MyGroup = ({ user, onLogout }) => {
             <div className="lg:col-span-2 space-y-8">
               {/* Project Details */}
               <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black">
-                <h2 className="text-2xl font-black text-gray-900 mb-6">📋 Project Details</h2>
+                <h2 className="text-2xl font-black text-gray-900 mb-6 flex items-center gap-2">
+                  <Clipboard className="w-6 h-6 text-blue-500" />
+                  Project Details
+                </h2>
                 
                 <div className="space-y-6">
                   <div>
@@ -158,7 +190,10 @@ const MyGroup = ({ user, onLogout }) => {
 
               {/* Team Members */}
               <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black">
-                <h2 className="text-2xl font-black text-gray-900 mb-6">👥 Team Members</h2>
+                <h2 className="text-2xl font-black text-gray-900 mb-6 flex items-center gap-2">
+                  <Users className="w-6 h-6 text-blue-500" />
+                  Team Members
+                </h2>
                 
                 <div className="grid md:grid-cols-2 gap-6">
                   {group.members.map((member) => (
@@ -177,9 +212,9 @@ const MyGroup = ({ user, onLogout }) => {
                           {member.student.user.name.charAt(0)}
                         </div>
                         <div>
-                          <h3 className="font-bold text-gray-900">
+                          <h3 className="font-bold text-gray-900 flex items-center gap-2">
                             {member.student.user.name}
-                            {member.isLeader && <span className="text-yellow-600 ml-2">👑</span>}
+                            {member.isLeader && <Crown className="w-4 h-4 text-yellow-600" />}
                           </h3>
                           <p className="text-sm text-gray-600">{member.student.user.email}</p>
                           <p className="text-sm text-gray-600">
@@ -202,7 +237,10 @@ const MyGroup = ({ user, onLogout }) => {
             <div className="space-y-8">
               {/* Faculty Supervisor */}
               <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black">
-                <h3 className="text-xl font-black text-gray-900 mb-4">🎓 Faculty Supervisor</h3>
+                <h3 className="text-xl font-black text-gray-900 mb-4 flex items-center gap-2">
+                  <GraduationCap className="w-5 h-5 text-indigo-500" />
+                  Faculty Supervisor
+                </h3>
                 <div className="bg-indigo-50 p-4 rounded-2xl border-3 border-indigo-500">
                   <h4 className="font-bold text-indigo-900">{group.faculty.user.name}</h4>
                   <p className="text-sm text-indigo-700">{group.faculty.user.email}</p>
@@ -212,24 +250,36 @@ const MyGroup = ({ user, onLogout }) => {
 
               {/* Quick Actions */}
               <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black">
-                <h3 className="text-xl font-black text-gray-900 mb-4">⚡ Quick Actions</h3>
+                <h3 className="text-xl font-black text-gray-900 mb-4 flex items-center gap-2">
+                  <Zap className="w-5 h-5 text-yellow-500" />
+                  Quick Actions
+                </h3>
                 <div className="space-y-3">
                   <div className="bg-blue-100 p-3 rounded-2xl border-2 border-blue-500 text-center">
-                    <div className="font-bold text-blue-800 text-sm mb-2">📁 Project Files</div>
+                    <div className="text-2xl mb-2 flex justify-center">
+                      <FileText className="w-6 h-6 text-blue-600" />
+                    </div>
+                    <div className="font-bold text-blue-800 text-sm mb-2">Project Files</div>
                     <button className="bg-blue-500 text-white px-3 py-1 rounded-full text-xs font-bold">
                       Coming Soon
                     </button>
                   </div>
                   
                   <div className="bg-green-100 p-3 rounded-2xl border-2 border-green-500 text-center">
-                    <div className="font-bold text-green-800 text-sm mb-2">💬 Team Chat</div>
+                    <div className="text-2xl mb-2 flex justify-center">
+                      <MessageCircle className="w-6 h-6 text-green-600" />
+                    </div>
+                    <div className="font-bold text-green-800 text-sm mb-2">Team Chat</div>
                     <button className="bg-green-500 text-white px-3 py-1 rounded-full text-xs font-bold">
                       Coming Soon
                     </button>
                   </div>
                   
                   <div className="bg-purple-100 p-3 rounded-2xl border-2 border-purple-500 text-center">
-                    <div className="font-bold text-purple-800 text-sm mb-2">📊 Progress Tracker</div>
+                    <div className="text-2xl mb-2 flex justify-center">
+                      <BarChart3 className="w-6 h-6 text-purple-600" />
+                    </div>
+                    <div className="font-bold text-purple-800 text-sm mb-2">Progress Tracker</div>
                     <button className="bg-purple-500 text-white px-3 py-1 rounded-full text-xs font-bold">
                       Coming Soon
                     </button>
@@ -239,7 +289,10 @@ const MyGroup = ({ user, onLogout }) => {
 
               {/* Group Stats */}
               <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black">
-                <h3 className="text-xl font-black text-gray-900 mb-4">📊 Group Stats</h3>
+                <h3 className="text-xl font-black text-gray-900 mb-4 flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-gray-500" />
+                  Group Stats
+                </h3>
                 <div className="space-y-3">
                   <div className="flex justify-between items-center">
                     <span className="font-bold text-gray-700">Days Active:</span>

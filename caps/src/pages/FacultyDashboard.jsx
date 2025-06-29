@@ -1,4 +1,15 @@
 import React, { useState, useEffect } from 'react';
+import { 
+  GraduationCap, 
+  Clock, 
+  CheckCircle, 
+  Check, 
+  X, 
+  Users,
+  BarChart3,
+  Bell,
+  Mail
+} from 'lucide-react';
 import Header from '../components/Header';
 
 const FacultyDashboard = ({ user, onLogout }) => {
@@ -69,7 +80,7 @@ const FacultyDashboard = ({ user, onLogout }) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
+      <div className="min-h-screen" style={{backgroundColor: '#FFFFF4'}}>
         <Header user={user} onLogout={onLogout} />
         <div className="flex items-center justify-center h-96">
           <div className="bg-white p-8 rounded-2xl shadow-lg border-4 border-black">
@@ -85,14 +96,15 @@ const FacultyDashboard = ({ user, onLogout }) => {
   const activeGroups = groups.filter(group => group.status === 'ACTIVE');
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
+    <div className="min-h-screen" style={{backgroundColor: '#FFFFF4'}}>
       <Header user={user} onLogout={onLogout} />
       
       <div className="container mx-auto px-6 py-8">
         {/* Welcome Section */}
         <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black mb-8">
-          <h1 className="text-4xl font-black text-gray-900 mb-2">
-            Welcome, Prof. {user.name}! 🎓
+          <h1 className="text-4xl font-black text-gray-900 mb-2 flex items-center gap-3">
+            Welcome, Prof. {user.name}! 
+            <GraduationCap className="w-10 h-10 text-blue-500" />
           </h1>
           <p className="text-xl text-gray-600 font-semibold">
             Manage student groups and oversee project assignments
@@ -103,8 +115,9 @@ const FacultyDashboard = ({ user, onLogout }) => {
           {/* Pending Group Requests */}
           <div className="lg:col-span-2">
             <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black mb-8">
-              <h2 className="text-2xl font-black text-gray-900 mb-6">
-                ⏳ Pending Group Requests ({pendingGroups.length})
+              <h2 className="text-2xl font-black text-gray-900 mb-6 flex items-center gap-2">
+                <Clock className="w-6 h-6 text-yellow-500" />
+                Pending Group Requests ({pendingGroups.length})
               </h2>
               
               {pendingGroups.length > 0 ? (
@@ -156,15 +169,17 @@ const FacultyDashboard = ({ user, onLogout }) => {
                       <div className="flex space-x-4">
                         <button
                           onClick={() => handleGroupAction(group.groupId, 'APPROVED')}
-                          className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200"
+                          className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 flex items-center gap-2"
                         >
-                          ✅ Approve
+                          <Check className="w-4 h-4" />
+                          Approve
                         </button>
                         <button
                           onClick={() => handleGroupAction(group.groupId, 'REJECTED')}
-                          className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200"
+                          className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 flex items-center gap-2"
                         >
-                          ❌ Reject
+                          <X className="w-4 h-4" />
+                          Reject
                         </button>
                       </div>
                     </div>
@@ -172,7 +187,9 @@ const FacultyDashboard = ({ user, onLogout }) => {
                 </div>
               ) : (
                 <div className="text-center py-8">
-                  <div className="text-6xl mb-4">📋</div>
+                  <div className="text-6xl mb-4 flex justify-center">
+                    <Users className="w-16 h-16 text-gray-400" />
+                  </div>
                   <h3 className="text-xl font-bold text-gray-700 mb-2">No pending requests</h3>
                   <p className="text-gray-600">All groups have been reviewed</p>
                 </div>
@@ -181,8 +198,9 @@ const FacultyDashboard = ({ user, onLogout }) => {
 
             {/* Active Groups */}
             <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black">
-              <h2 className="text-2xl font-black text-gray-900 mb-6">
-                ✅ Active Groups ({activeGroups.length})
+              <h2 className="text-2xl font-black text-gray-900 mb-6 flex items-center gap-2">
+                <CheckCircle className="w-6 h-6 text-green-500" />
+                Active Groups ({activeGroups.length})
               </h2>
               
               {activeGroups.length > 0 ? (
@@ -205,7 +223,9 @@ const FacultyDashboard = ({ user, onLogout }) => {
                 </div>
               ) : (
                 <div className="text-center py-8 text-gray-500">
-                  <div className="text-4xl mb-4">👥</div>
+                  <div className="text-4xl mb-4 flex justify-center">
+                    <Users className="w-12 h-12" />
+                  </div>
                   <p className="font-semibold">No active groups yet</p>
                 </div>
               )}
@@ -216,7 +236,10 @@ const FacultyDashboard = ({ user, onLogout }) => {
           <div className="space-y-8">
             {/* Quick Stats */}
             <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black">
-              <h3 className="text-xl font-black text-gray-900 mb-6">📊 Quick Stats</h3>
+              <h3 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-2">
+                <BarChart3 className="w-5 h-5 text-gray-500" />
+                Quick Stats
+              </h3>
               <div className="space-y-4">
                 <div className="bg-yellow-100 p-4 rounded-2xl border-3 border-yellow-500">
                   <div className="text-2xl font-black text-yellow-800">{pendingGroups.length}</div>
@@ -235,7 +258,10 @@ const FacultyDashboard = ({ user, onLogout }) => {
 
             {/* Recent Notifications */}
             <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black">
-              <h3 className="text-xl font-black text-gray-900 mb-6">🔔 Recent Notifications</h3>
+              <h3 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-2">
+                <Bell className="w-5 h-5 text-blue-500" />
+                Recent Notifications
+              </h3>
               <div className="space-y-3">
                 {notifications.length > 0 ? (
                   notifications.map((notification) => (
@@ -254,7 +280,9 @@ const FacultyDashboard = ({ user, onLogout }) => {
                   ))
                 ) : (
                   <div className="text-center py-4 text-gray-500">
-                    <div className="text-2xl mb-2">📭</div>
+                    <div className="text-2xl mb-2 flex justify-center">
+                      <Mail className="w-8 h-8" />
+                    </div>
                     <p className="text-sm font-semibold">No notifications</p>
                   </div>
                 )}
