@@ -1,1 +1,134 @@
 @import "tailwindcss";
+
+/* Custom border utilities */
+.border-3 {
+  border-width: 3px;
+}
+
+/* Custom shadows for neubrutalism */
+.shadow-brutal {
+  box-shadow: 4px 4px 0px 0px rgba(0, 0, 0, 1);
+}
+
+.shadow-brutal-lg {
+  box-shadow: 6px 6px 0px 0px rgba(0, 0, 0, 1);
+}
+
+/* Smooth animations */
+.transition-brutal {
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Focus states */
+.focus-brutal:focus {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.5);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #f1f5f9;
+  border-radius: 10px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #3b82f6;
+  border-radius: 10px;
+  border: 2px solid #000;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #2563eb;
+}
+
+/* Button hover effects */
+.btn-brutal {
+  @apply font-black py-3 px-6 rounded-2xl border-3 border-black shadow-lg transition-all duration-200;
+}
+
+.btn-brutal:hover {
+  @apply shadow-xl transform -translate-y-1;
+}
+
+.btn-brutal:active {
+  @apply transform translate-y-0 shadow-lg;
+}
+
+/* Card hover effects */
+.card-brutal {
+  @apply bg-white rounded-3xl shadow-2xl border-4 border-black transition-all duration-200;
+}
+
+.card-brutal:hover {
+  @apply shadow-2xl transform -translate-y-1;
+}
+
+/* Loading animation */
+@keyframes bounce-brutal {
+  0%, 20%, 53%, 80%, 100% {
+    transform: translate3d(0,0,0);
+  }
+  40%, 43% {
+    transform: translate3d(0, -30px, 0);
+  }
+  70% {
+    transform: translate3d(0, -15px, 0);
+  }
+  90% {
+    transform: translate3d(0, -4px, 0);
+  }
+}
+
+.bounce-brutal {
+  animation: bounce-brutal 1s ease-in-out infinite;
+}
+
+/* Gradient backgrounds */
+.gradient-brutal {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+}
+
+/* Text selection */
+::selection {
+  background-color: #3b82f6;
+  color: white;
+}
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom form inputs */
+input[type="text"],
+input[type="email"],
+input[type="password"],
+input[type="tel"],
+select,
+textarea {
+  @apply transition-all duration-200;
+}
+
+input[type="text"]:focus,
+input[type="email"]:focus,
+input[type="password"]:focus,
+input[type="tel"]:focus,
+select:focus,
+textarea:focus {
+  @apply transform scale-105;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+  .card-brutal {
+    @apply shadow-lg;
+  }
+  
+  .btn-brutal:hover {
+    @apply transform-none shadow-lg;
+  }
+}
