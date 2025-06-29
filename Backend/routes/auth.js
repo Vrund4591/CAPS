@@ -52,7 +52,7 @@ router.post('/register', async (req, res) => {
           enrollmentNo: additionalData.enrollmentNo,
           class: additionalData.class,
           division: additionalData.division,
-          semester: additionalData.semester,
+          semester: parseInt(additionalData.semester),
           phoneNumber: additionalData.phoneNumber
         }
       });

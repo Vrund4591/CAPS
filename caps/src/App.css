@@ -1,7 +1,9 @@
+/* This file can be empty or contain custom component styles */
+/* Tailwind utilities will be available throughout the app */
+
 #root {
-  max-width: 1280px;
+  max-width: screen;
   margin: 0 auto;
-  padding: 2rem;
   text-align: center;
 }
 

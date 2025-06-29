@@ -16,11 +16,59 @@ const generateGroupId = async () => {
   return `G${lastNumber + 1}`;
 };
 
-// Create group (Students only)
+// Get available students for team selection
+router.get('/available-students', authenticateToken, authorizeRoles('STUDENT'), async (req, res) => {
+  try {
+    // Get all students who are not already in a group
+    const availableStudents = await prisma.student.findMany({
+      where: {
+        groupMember: null // Students not in any group
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true }
+        }
+      }
+    });
+
+    res.json({ students: availableStudents });
+  } catch (error) {
+    console.error('Get available students error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Create group with team members (Students only)
 router.post('/create', authenticateToken, authorizeRoles('STUDENT'), async (req, res) => {
   try {
-    const { title, description, facultyId, projectType, frontendTech, backendTech } = req.body;
+    const { title, description, facultyId, projectType, frontendTech, backendTech, teamMemberIds = [] } = req.body;
+    
+    // Comprehensive user validation
+    if (!req.user) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+    
+    if (req.user.role !== 'STUDENT') {
+      return res.status(403).json({ message: 'Only students can create groups' });
+    }
+    
+    if (!req.user.student) {
+      return res.status(400).json({ 
+        message: 'Student profile not found. Please contact administrator to complete your profile setup.',
+        userInfo: {
+          id: req.user.id,
+          email: req.user.email,
+          role: req.user.role
+        }
+      });
+    }
+    
     const studentId = req.user.student.id;
+    
+    // Validate required fields
+    if (!title || !description || !facultyId || !projectType) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
 
     // Check if student is already in a group
     const existingMembership = await prisma.groupMember.findFirst({
@@ -40,53 +88,107 @@ router.post('/create', authenticateToken, authorizeRoles('STUDENT'), async (req,
       return res.status(400).json({ message: 'Faculty not found' });
     }
 
-    const groupId = await generateGroupId();
+    // Validate team size (max 4 including leader)
+    if (teamMemberIds.length > 3) {
+      return res.status(400).json({ message: 'Maximum 4 members allowed in a group' });
+    }
 
-    // Create group
-    const group = await prisma.group.create({
-      data: {
-        groupId,
-        title,
-        description,
-        projectType,
-        frontendTech,
-        backendTech,
-        status: 'PENDING',
-        teamLeaderId: studentId,
-        facultyId
+    // Check if all selected team members are available
+    const memberStudents = await prisma.student.findMany({
+      where: {
+        id: { in: teamMemberIds },
+        groupMember: null
       },
       include: {
-        faculty: {
-          include: { user: true }
-        },
-        teamLeader: {
-          include: { user: true }
+        user: {
+          select: { id: true, name: true, email: true }
         }
       }
     });
 
-    // Add creator as group member and leader
-    await prisma.groupMember.create({
-      data: {
-        studentId,
-        groupId: group.id,
-        isLeader: true
+    if (memberStudents.length !== teamMemberIds.length) {
+      return res.status(400).json({ message: 'Some selected students are already in a group' });
+    }
+
+    const groupId = await generateGroupId();
+
+    // Create group with transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create group
+      const group = await tx.group.create({
+        data: {
+          groupId,
+          title,
+          description,
+          projectType,
+          frontendTech,
+          backendTech,
+          status: 'PENDING',
+          teamLeaderId: studentId,
+          facultyId
+        },
+        include: {
+          faculty: {
+            include: { user: true }
+          },
+          teamLeader: {
+            include: { user: true }
+          }
+        }
+      });
+
+      // Add creator as group member and leader
+      await tx.groupMember.create({
+        data: {
+          studentId,
+          groupId: group.id,
+          isLeader: true
+        }
+      });
+
+      // Add selected team members
+      if (teamMemberIds.length > 0) {
+        await tx.groupMember.createMany({
+          data: teamMemberIds.map(memberId => ({
+            studentId: memberId,
+            groupId: group.id,
+            isLeader: false
+          }))
+        });
       }
+
+      return { group, memberStudents };
     });
+
+    // Prepare team member names for notification
+    const teamMemberNames = memberStudents.map(student => student.user.name).join(', ');
+    const teamInfo = teamMemberNames ? ` with team members: ${teamMemberNames}` : '';
 
     // Create notification for faculty
     await prisma.notification.create({
       data: {
         title: 'New Group Request',
-        message: `New group "${title}" created by ${req.user.name} is waiting for your approval.`,
+        message: `New group "${title}" created by ${req.user.name}${teamInfo} is waiting for your approval.`,
         type: 'GROUP_REQUEST',
-        recipientEmail: group.faculty.user.email
+        recipientEmail: result.group.faculty.user.email
       }
     });
 
+    // Create notifications for team members
+    if (memberStudents.length > 0) {
+      await prisma.notification.createMany({
+        data: memberStudents.map(student => ({
+          title: 'Added to Group',
+          message: `You have been added to group "${title}" by ${req.user.name}. Waiting for faculty approval.`,
+          type: 'GROUP_INVITATION',
+          recipientEmail: student.user.email
+        }))
+      });
+    }
+
     res.status(201).json({
       message: 'Group created successfully',
-      group
+      group: result.group
     });
 
   } catch (error) {
@@ -95,7 +197,7 @@ router.post('/create', authenticateToken, authorizeRoles('STUDENT'), async (req,
   }
 });
 
-// Join group
+// Join group (keeping existing functionality for students who want to join later)
 router.post('/:groupId/join', authenticateToken, authorizeRoles('STUDENT'), async (req, res) => {
   try {
     const { groupId } = req.params;
@@ -195,6 +297,13 @@ router.patch('/:groupId/status', authenticateToken, authorizeRoles('FACULTY'), a
       include: {
         teamLeader: {
           include: { user: true }
+        },
+        members: {
+          include: {
+            student: {
+              include: { user: true }
+            }
+          }
         }
       }
     });
@@ -208,14 +317,16 @@ router.patch('/:groupId/status', authenticateToken, authorizeRoles('FACULTY'), a
       data: { status: status === 'APPROVED' ? 'ACTIVE' : 'REJECTED' }
     });
 
-    // Create notification for team leader
-    await prisma.notification.create({
-      data: {
+    // Create notifications for all group members
+    const allMembers = group.members.map(member => member.student.user.email);
+    
+    await prisma.notification.createMany({
+      data: allMembers.map(email => ({
         title: `Group ${status}`,
         message: `Your group "${group.title}" has been ${status.toLowerCase()} by faculty.`,
         type: 'GROUP_UPDATE',
-        recipientEmail: group.teamLeader.user.email
-      }
+        recipientEmail: email
+      }))
     });
 
     res.json({

@@ -67,6 +67,7 @@ model Student {
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   groupMember  GroupMember?
   achievements Achievement[]
+  ledGroups    Group[]       @relation("GroupTeamLeader")
 
   @@map("students")
 }
@@ -108,8 +109,9 @@ model Group {
   updatedAt   DateTime    @updatedAt
 
   // Relationships
-  faculty Faculty       @relation(fields: [facultyId], references: [id])
-  members GroupMember[]
+  faculty    Faculty       @relation(fields: [facultyId], references: [id])
+  teamLeader Student       @relation("GroupTeamLeader", fields: [teamLeaderId], references: [id])
+  members    GroupMember[]
   projectIdeas ProjectIdea[]
 
   @@map("groups")
