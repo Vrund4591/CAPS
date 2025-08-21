@@ -25,7 +25,7 @@ enum Department {
 }
 
 enum ProjectType {
-  UDP  // University Defined Project
+  UDP  // User Defined Project
   IDP  // Industry Defined Project
 }
 

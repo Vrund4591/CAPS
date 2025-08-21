@@ -180,7 +180,7 @@ const CreateGroup = ({ user, onLogout }) => {
                       className="w-full p-4 border-3 border-gray-300 rounded-2xl focus:border-blue-500 focus:outline-none font-semibold"
                       required
                     >
-                      <option value="UDP">UDP - University Defined Project</option>
+                      <option value="UDP">UDP - User Defined Project</option>
                       <option value="IDP">IDP - Industry Defined Project</option>
                     </select>
                   </div>
