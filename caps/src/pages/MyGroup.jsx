@@ -133,7 +133,7 @@ const MyGroup = ({ user, onLogout }) => {
 
   return (
     <div className="min-h-screen" style={{backgroundColor: '#FFFFF4'}}>
-      <Header user={user} onLogout={onLogout} />
+      <Header user={user} onLogout={onLogout} hasGroup={!!group} />
       
       <div className="container mx-auto px-6 py-8">
         <div className="max-w-screen mx-auto">

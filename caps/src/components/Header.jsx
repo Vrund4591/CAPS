@@ -2,7 +2,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Home, Plus, Users, LogOut, Menu, User } from 'lucide-react';
 
-const Header = ({ user, onLogout }) => {
+const Header = ({ user, onLogout, hasGroup = false }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   const profileRef = useRef(null);
@@ -37,7 +37,12 @@ const Header = ({ user, onLogout }) => {
 
     if (user.role === 'STUDENT') {
       links.push(
-        { path: '/create-group', label: 'Create Group', icon: Plus },
+        { 
+          path: '/create-group', 
+          label: 'Create Group', 
+          icon: Plus,
+          disabled: hasGroup 
+        },
         { path: '/my-group', label: 'My Group', icon: Users }
       );
     }
@@ -65,12 +70,20 @@ const Header = ({ user, onLogout }) => {
               return (
                 <Link
                   key={link.path}
-                  to={link.path}
+                  to={link.disabled ? '#' : link.path}
                   className={`font-bold px-4 py-2 rounded-2xl border-2 transition-all duration-200 flex items-center gap-2 ${
-                    location.pathname === link.path
+                    link.disabled
+                      ? 'bg-gray-300 text-gray-500 border-gray-400 cursor-not-allowed opacity-50'
+                      : location.pathname === link.path
                       ? 'bg-blue-500 text-white border-black'
                       : 'text-gray-700 border-gray-300 hover:border-blue-500 hover:text-blue-500'
                   }`}
+                  onClick={(e) => {
+                    if (link.disabled) {
+                      e.preventDefault();
+                    }
+                  }}
+                  title={link.disabled ? 'You are already in a group' : ''}
                 >
                   <IconComponent className="w-4 h-4" />
                   {link.label}
@@ -139,10 +152,18 @@ const Header = ({ user, onLogout }) => {
                 return (
                   <Link
                     key={link.path}
-                    to={link.path}
-                    onClick={() => setIsMenuOpen(false)}
+                    to={link.disabled ? '#' : link.path}
+                    onClick={(e) => {
+                      if (link.disabled) {
+                        e.preventDefault();
+                      } else {
+                        setIsMenuOpen(false);
+                      }
+                    }}
                     className={`font-bold px-4 py-3 rounded-2xl border-2 transition-all duration-200 flex items-center gap-2 ${
-                      location.pathname === link.path
+                      link.disabled
+                        ? 'bg-gray-300 text-gray-500 border-gray-400 cursor-not-allowed opacity-50'
+                        : location.pathname === link.path
                         ? 'bg-blue-500 text-white border-black'
                         : 'text-gray-700 border-gray-300 hover:border-blue-500 hover:text-blue-500'
                     }`}

@@ -109,7 +109,7 @@ const StudentDashboard = ({ user, onLogout }) => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-purple-50">
-      <Header user={user} onLogout={onLogout} />
+      <Header user={user} onLogout={onLogout} hasGroup={!!myGroup} />
       
       <div className="container mx-auto px-6 py-8">
         {/* Welcome Section */}
