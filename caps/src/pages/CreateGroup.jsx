@@ -25,11 +25,110 @@ const CreateGroup = ({ user, onLogout }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [isEditing, setIsEditing] = useState(false);
+  const [originalGroup, setOriginalGroup] = useState(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
     fetchData();
+    
+    // Check if editing an existing group
+    const urlParams = new URLSearchParams(window.location.search);
+    const editGroupId = urlParams.get('edit');
+    if (editGroupId) {
+      setIsEditing(true);
+      fetchGroupForEditing(editGroupId);
+    }
   }, []);
+
+  const fetchGroupForEditing = async (groupId) => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5001/api/groups/my-group', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      if (response.ok) {
+        const data = await response.json();
+        const group = data.group;
+        
+        if (group.groupId === groupId && group.status === 'REJECTED') {
+          setOriginalGroup(group);
+          
+          // Get the current team member IDs (excluding leader)
+          const currentMemberIds = group.members
+            .filter(member => !member.isLeader)
+            .map(member => member.student.id);
+          
+          setFormData({
+            title: group.title,
+            description: group.description,
+            facultyId: group.facultyId,
+            projectType: group.projectType,
+            frontendTech: group.frontendTech || '',
+            backendTech: group.backendTech || '',
+            teamMemberIds: currentMemberIds
+          });
+          
+          // Fetch all students including the ones in the rejected group
+          await fetchAllStudentsForEditing(currentMemberIds);
+        } else {
+          setError('Group not found or cannot be edited');
+          navigate('/student-dashboard');
+        }
+      }
+    } catch (error) {
+      setError('Failed to load group data: ' + error.message);
+    }
+  };
+
+  const fetchAllStudentsForEditing = async (currentMemberIds) => {
+    try {
+      const token = localStorage.getItem('token');
+      
+      // Fetch available students
+      const studentsResponse = await fetch('http://localhost:5001/api/groups/available-students', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      
+      // Fetch students from the rejected group
+      const rejectedGroupResponse = await fetch('http://localhost:5001/api/groups/rejected-group-members', {
+        method: 'POST',
+        headers: { 
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ memberIds: currentMemberIds })
+      });
+      
+      let allAvailableStudents = [];
+      let rejectedGroupMembers = [];
+      
+      if (studentsResponse.ok) {
+        const studentsData = await studentsResponse.json();
+        allAvailableStudents = studentsData.students.filter(student => student.id !== user.profile.id);
+      }
+      
+      if (rejectedGroupResponse.ok) {
+        const rejectedData = await rejectedGroupResponse.json();
+        rejectedGroupMembers = rejectedData.students || [];
+      }
+      
+      // Combine available students with rejected group members, removing duplicates
+      const combinedStudents = [...allAvailableStudents];
+      rejectedGroupMembers.forEach(rejectedMember => {
+        if (!combinedStudents.find(student => student.id === rejectedMember.id)) {
+          combinedStudents.push(rejectedMember);
+        }
+      });
+      
+      setAvailableStudents(combinedStudents);
+      
+    } catch (error) {
+      console.error('Error fetching students for editing:', error);
+    }
+  };
 
   const fetchData = async () => {
     try {
@@ -76,6 +175,16 @@ const CreateGroup = ({ user, onLogout }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (isEditing) {
+      setShowConfirmDialog(true);
+      return;
+    }
+    
+    await createGroup();
+  };
+
+  const createGroup = async () => {
     setLoading(true);
     setError('');
     setSuccess('');
@@ -88,6 +197,15 @@ const CreateGroup = ({ user, onLogout }) => {
 
     try {
       const token = localStorage.getItem('token');
+      
+      // If editing, first delete the old group
+      if (isEditing && originalGroup) {
+        await fetch(`http://localhost:5001/api/groups/${originalGroup.groupId}/delete`, {
+          method: 'DELETE',
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+      }
+      
       const response = await fetch('http://localhost:5001/api/groups/create', {
         method: 'POST',
         headers: {
@@ -100,7 +218,7 @@ const CreateGroup = ({ user, onLogout }) => {
       const data = await response.json();
 
       if (response.ok) {
-        setSuccess('Group created successfully! Redirecting to dashboard...');
+        setSuccess(isEditing ? 'Group recreated successfully! Redirecting to dashboard...' : 'Group created successfully! Redirecting to dashboard...');
         setTimeout(() => {
           navigate('/student-dashboard');
         }, 2000);
@@ -112,6 +230,7 @@ const CreateGroup = ({ user, onLogout }) => {
     }
 
     setLoading(false);
+    setShowConfirmDialog(false);
   };
 
   return (
@@ -124,11 +243,18 @@ const CreateGroup = ({ user, onLogout }) => {
           <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black mb-8">
             <h1 className="text-4xl font-black text-gray-900 mb-2 flex items-center gap-3">
               <Rocket className="w-10 h-10 text-blue-500" />
-              Create New Group
+              {isEditing ? 'Recreate Group' : 'Create New Group'}
             </h1>
             <p className="text-xl text-gray-600 font-semibold">
-              Start your collaborative journey by forming a project team
+              {isEditing ? 'Improve your project based on faculty feedback and resubmit' : 'Start your collaborative journey by forming a project team'}
             </p>
+            
+            {isEditing && originalGroup && (
+              <div className="mt-4 p-4 bg-yellow-50 rounded-2xl border-2 border-yellow-400">
+                <h3 className="font-bold text-yellow-800 mb-2">Previous Rejection Reason:</h3>
+                <p className="text-yellow-700 text-sm whitespace-pre-line">{originalGroup.rejectionReason}</p>
+              </div>
+            )}
           </div>
 
           {/* Form */}
@@ -268,35 +394,62 @@ const CreateGroup = ({ user, onLogout }) => {
                 </h2>
                 <p className="text-green-700 font-semibold mb-6">
                   Select up to 3 additional team members (You will be the team leader by default)
+                  {isEditing && (
+                    <span className="block text-sm mt-1 text-green-600">
+                      Previously selected members are shown below. You can add or remove members as needed.
+                    </span>
+                  )}
                 </p>
                 
                 {availableStudents.length > 0 ? (
                   <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
-                    {availableStudents.map((student) => (
-                      <div
-                        key={student.id}
-                        className={`p-4 rounded-2xl border-3 cursor-pointer transition-all duration-200 ${
-                          formData.teamMemberIds.includes(student.id)
-                            ? 'bg-green-200 border-green-600'
-                            : 'bg-white border-gray-300 hover:border-green-500'
-                        }`}
-                        onClick={() => handleTeamMemberToggle(student.id)}
-                      >
-                        <div className="flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={formData.teamMemberIds.includes(student.id)}
-                            onChange={() => handleTeamMemberToggle(student.id)}
-                            className="mr-3 w-5 h-5"
-                          />
-                          <div>
-                            <h3 className="font-bold text-gray-900">{student.user.name}</h3>
-                            <p className="text-sm text-gray-600">{student.enrollmentNo}</p>
-                            <p className="text-sm text-gray-600">{student.class} - {student.division}</p>
+                    {availableStudents.map((student) => {
+                      const isSelected = formData.teamMemberIds.includes(student.id);
+                      const wasPreviouslySelected = isEditing && originalGroup && 
+                        originalGroup.members.some(member => 
+                          member.student.id === student.id && !member.isLeader
+                        );
+                      
+                      return (
+                        <div
+                          key={student.id}
+                          className={`p-4 rounded-2xl border-3 cursor-pointer transition-all duration-200 ${
+                            isSelected
+                              ? 'bg-green-200 border-green-600'
+                              : wasPreviouslySelected
+                              ? 'bg-yellow-100 border-yellow-500 hover:border-green-500'
+                              : 'bg-white border-gray-300 hover:border-green-500'
+                          }`}
+                          onClick={() => handleTeamMemberToggle(student.id)}
+                        >
+                          <div className="flex items-center">
+                            <input
+                              type="checkbox"
+                              checked={isSelected}
+                              onChange={() => handleTeamMemberToggle(student.id)}
+                              className="mr-3 w-5 h-5"
+                            />
+                            <div className="flex-1">
+                              <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                                {student.user.name}
+                                {wasPreviouslySelected && !isSelected && (
+                                  <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full font-bold">
+                                    Was Member
+                                  </span>
+                                )}
+                                {isSelected && wasPreviouslySelected && (
+                                  <span className="text-xs bg-green-200 text-green-800 px-2 py-1 rounded-full font-bold">
+                                    Current
+                                  </span>
+                                )}
+                              </h3>
+                              <p className="text-sm text-gray-600">{student.enrollmentNo}</p>
+                              <p className="text-sm text-gray-600">{student.class} - {student.division}</p>
+                            </div>
                           </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="text-center py-8 text-gray-500">
@@ -310,6 +463,16 @@ const CreateGroup = ({ user, onLogout }) => {
 
                 <div className="mt-4 text-sm text-green-700 font-semibold">
                   Selected: {formData.teamMemberIds.length}/3 members
+                  {isEditing && originalGroup && (
+                    <div className="mt-2 text-xs">
+                      <span className="inline-block bg-yellow-100 text-yellow-800 px-2 py-1 rounded mr-2">
+                        Yellow: Previously selected members
+                      </span>
+                      <span className="inline-block bg-green-100 text-green-800 px-2 py-1 rounded">
+                        Green: Currently selected
+                      </span>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -321,13 +484,39 @@ const CreateGroup = ({ user, onLogout }) => {
                   className="bg-blue-500 hover:bg-blue-600 text-white font-black py-4 px-8 rounded-2xl border-3 border-black shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 disabled:opacity-50 disabled:transform-none flex items-center gap-2 justify-center"
                 >
                   <Rocket className="w-5 h-5" />
-                  {loading ? 'Creating Group...' : 'Create Group'}
+                  {loading ? (isEditing ? 'Recreating Group...' : 'Creating Group...') : (isEditing ? 'Recreate Group' : 'Create Group')}
                 </button>
               </div>
             </form>
           </div>
         </div>
       </div>
+
+      {/* Confirmation Dialog */}
+      {showConfirmDialog && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black max-w-md w-full mx-4">
+            <h3 className="text-2xl font-black text-gray-900 mb-4">Confirm Group Recreation</h3>
+            <p className="text-gray-600 mb-6 font-semibold">
+              This will delete your current rejected group and create a new one with the updated information. All previous group data will be lost.
+            </p>
+            <div className="flex space-x-4">
+              <button
+                onClick={() => setShowConfirmDialog(false)}
+                className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-2xl border-3 border-black transition-all duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={createGroup}
+                className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-4 rounded-2xl border-3 border-black transition-all duration-200"
+              >
+                Confirm
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

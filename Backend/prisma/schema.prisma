@@ -67,7 +67,7 @@ model Student {
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
   groupMember  GroupMember?
   achievements Achievement[]
-  ledGroups    Group[]       @relation("GroupTeamLeader")
+  ledGroups    Group[]       @relation("GroupLeader")
 
   @@map("students")
 }
@@ -95,24 +95,27 @@ model Admin {
 }
 
 model Group {
-  id          String      @id @default(cuid())
-  groupId     String      @unique // Auto-generated like G1, G2, etc.
-  title       String
-  description String
-  projectType ProjectType
-  frontendTech String?    // Technologies for frontend
-  backendTech  String?    // Technologies for backend
-  status      GroupStatus @default(PENDING)
-  teamLeaderId String     // Student ID who created the group
-  facultyId   String
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-
-  // Relationships
-  faculty    Faculty       @relation(fields: [facultyId], references: [id])
-  teamLeader Student       @relation("GroupTeamLeader", fields: [teamLeaderId], references: [id])
-  members    GroupMember[]
-  projectIdeas ProjectIdea[]
+  id            String        @id @default(cuid())
+  groupId       String        @unique
+  title         String
+  description   String
+  projectType   ProjectType
+  frontendTech  String?
+  backendTech   String?
+  status        GroupStatus   @default(PENDING)
+  rejectionReason String?     // Added field for rejection reason
+  createdAt     DateTime      @default(now())
+  updatedAt     DateTime      @updatedAt
+  
+  // Relations
+  facultyId     String
+  faculty       Faculty       @relation(fields: [facultyId], references: [id])
+  
+  teamLeaderId  String
+  teamLeader    Student       @relation("GroupLeader", fields: [teamLeaderId], references: [id])
+  
+  members       GroupMember[]
+  projectIdeas  ProjectIdea[]
 
   @@map("groups")
 }

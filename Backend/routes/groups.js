@@ -289,8 +289,18 @@ router.get('/', authenticateToken, async (req, res) => {
 router.patch('/:groupId/status', authenticateToken, authorizeRoles('FACULTY'), async (req, res) => {
   try {
     const { groupId } = req.params;
-    const { status } = req.body; // 'APPROVED' or 'REJECTED'
+    const { status, rejectionReason } = req.body; // Added rejectionReason
     const facultyId = req.user.faculty.id;
+
+    // Validate status
+    if (!['APPROVED', 'REJECTED'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status. Must be APPROVED or REJECTED' });
+    }
+
+    // Validate rejection reason if status is REJECTED
+    if (status === 'REJECTED' && (!rejectionReason || rejectionReason.trim().length === 0)) {
+      return res.status(400).json({ message: 'Rejection reason is required when rejecting a group' });
+    }
 
     const group = await prisma.group.findFirst({
       where: { groupId, facultyId },
@@ -304,27 +314,53 @@ router.patch('/:groupId/status', authenticateToken, authorizeRoles('FACULTY'), a
               include: { user: true }
             }
           }
+        },
+        faculty: {
+          include: { user: true }
         }
       }
     });
 
     if (!group) {
-      return res.status(404).json({ message: 'Group not found' });
+      return res.status(404).json({ message: 'Group not found or you are not authorized to modify this group' });
+    }
+
+    if (group.status !== 'PENDING') {
+      return res.status(400).json({ message: 'Group status has already been decided' });
+    }
+
+    const updateData = {
+      status: status === 'APPROVED' ? 'ACTIVE' : 'REJECTED'
+    };
+
+    // Add rejection reason if provided
+    if (status === 'REJECTED' && rejectionReason) {
+      updateData.rejectionReason = rejectionReason.trim();
     }
 
     const updatedGroup = await prisma.group.update({
       where: { id: group.id },
-      data: { status: status === 'APPROVED' ? 'ACTIVE' : 'REJECTED' }
+      data: updateData
     });
 
     // Create notifications for all group members
     const allMembers = group.members.map(member => member.student.user.email);
     
+    let notificationTitle, notificationMessage;
+    
+    if (status === 'APPROVED') {
+      notificationTitle = 'Group Approved! 🎉';
+      notificationMessage = `Congratulations! Your group "${group.title}" has been approved by Prof. ${group.faculty.user.name}. You can now start working on your project.`;
+    } else {
+      notificationTitle = 'Group Request Rejected';
+      notificationMessage = `Your group "${group.title}" has been rejected by Prof. ${group.faculty.user.name}.\n\nReason: ${rejectionReason}\n\nYou can create a new group with the necessary improvements.`;
+    }
+
     await prisma.notification.createMany({
       data: allMembers.map(email => ({
-        title: `Group ${status}`,
-        message: `Your group "${group.title}" has been ${status.toLowerCase()} by faculty.`,
-        type: 'GROUP_UPDATE',
+        title: notificationTitle,
+        message: notificationMessage,
+        type: status === 'APPROVED' ? 'GROUP_APPROVED' : 'GROUP_REJECTED',
         recipientEmail: email
       }))
     });
@@ -336,7 +372,7 @@ router.patch('/:groupId/status', authenticateToken, authorizeRoles('FACULTY'), a
 
   } catch (error) {
     console.error('Update group status error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error while updating group status' });
   }
 });
 
@@ -373,6 +409,133 @@ router.get('/my-group', authenticateToken, authorizeRoles('STUDENT'), async (req
 
   } catch (error) {
     console.error('Get my group error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Delete group (Students only - for pending or rejected groups)
+router.delete('/:groupId/delete', authenticateToken, authorizeRoles('STUDENT'), async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const studentId = req.user.student.id;
+
+    // Find the group and verify ownership and status
+    const group = await prisma.group.findFirst({
+      where: { 
+        groupId,
+        teamLeaderId: studentId,
+        status: { in: ['PENDING', 'REJECTED'] } // Allow deletion of both pending and rejected groups
+      },
+      include: {
+        members: {
+          include: {
+            student: {
+              include: { user: true }
+            }
+          }
+        }
+      }
+    });
+
+    if (!group) {
+      return res.status(404).json({ 
+        message: 'Group not found, not owned by you, or cannot be deleted (only pending or rejected groups can be deleted)' 
+      });
+    }
+
+    // Delete group and all related data in transaction
+    await prisma.$transaction(async (tx) => {
+      // Delete all group members
+      await tx.groupMember.deleteMany({
+        where: { groupId: group.id }
+      });
+
+      // Delete any notifications related to this group
+      await tx.notification.deleteMany({
+        where: {
+          OR: [
+            { message: { contains: group.title } },
+            { type: { in: ['GROUP_REQUEST', 'GROUP_INVITATION', 'GROUP_REJECTED', 'GROUP_APPROVED'] } }
+          ]
+        }
+      });
+
+      // Delete the group itself
+      await tx.group.delete({
+        where: { id: group.id }
+      });
+    });
+
+    // Send notifications to all members about group deletion
+    const memberEmails = group.members
+      .filter(member => !member.isLeader) // Exclude the leader who initiated deletion
+      .map(member => member.student.user.email);
+    
+    if (memberEmails.length > 0) {
+      await prisma.notification.createMany({
+        data: memberEmails.map(email => ({
+          title: 'Group Deleted',
+          message: `The group "${group.title}" has been deleted by the team leader. You are now available to join other groups.`,
+          type: 'GROUP_DELETED',
+          recipientEmail: email
+        }))
+      });
+    }
+
+    // Notify faculty if the group was pending (so they know the request is no longer valid)
+    if (group.status === 'PENDING') {
+      const facultyResponse = await prisma.faculty.findUnique({
+        where: { id: group.facultyId },
+        include: { user: true }
+      });
+      
+      if (facultyResponse) {
+        await prisma.notification.create({
+          data: {
+            title: 'Group Request Withdrawn',
+            message: `The group "${group.title}" request has been withdrawn by the team leader ${req.user.name}.`,
+            type: 'GROUP_WITHDRAWN',
+            recipientEmail: facultyResponse.user.email
+          }
+        });
+      }
+    }
+
+    res.json({ 
+      message: 'Group deleted successfully. You can now create a new group.',
+      deletedGroupId: groupId
+    });
+
+  } catch (error) {
+    console.error('Delete group error:', error);
+    res.status(500).json({ message: 'Server error while deleting group' });
+  }
+});
+
+// Get members from rejected group for editing purposes
+router.post('/rejected-group-members', authenticateToken, authorizeRoles('STUDENT'), async (req, res) => {
+  try {
+    const { memberIds } = req.body;
+    
+    if (!memberIds || !Array.isArray(memberIds)) {
+      return res.json({ students: [] });
+    }
+
+    // Fetch the students who were in the rejected group
+    const students = await prisma.student.findMany({
+      where: {
+        id: { in: memberIds }
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true }
+        }
+      }
+    });
+
+    res.json({ students });
+  } catch (error) {
+    console.error('Get rejected group members error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

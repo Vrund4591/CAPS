@@ -16,6 +16,9 @@ const FacultyDashboard = ({ user, onLogout }) => {
   const [groups, setGroups] = useState([]);
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [rejectionModal, setRejectionModal] = useState({ open: false, groupId: null });
+  const [rejectionReason, setRejectionReason] = useState('');
+  const [actionLoading, setActionLoading] = useState(false);
 
   useEffect(() => {
     fetchDashboardData();
@@ -49,7 +52,8 @@ const FacultyDashboard = ({ user, onLogout }) => {
     setLoading(false);
   };
 
-  const handleGroupAction = async (groupId, status) => {
+  const handleGroupAction = async (groupId, status, reason = '') => {
+    setActionLoading(true);
     try {
       const token = localStorage.getItem('token');
       const response = await fetch(`http://localhost:5001/api/groups/${groupId}/status`, {
@@ -58,15 +62,40 @@ const FacultyDashboard = ({ user, onLogout }) => {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify({ status })
+        body: JSON.stringify({ 
+          status,
+          ...(status === 'REJECTED' && { rejectionReason: reason })
+        })
       });
 
       if (response.ok) {
         fetchDashboardData(); // Refresh data
+        if (status === 'REJECTED') {
+          setRejectionModal({ open: false, groupId: null });
+          setRejectionReason('');
+        }
+      } else {
+        const errorData = await response.json();
+        alert(errorData.message || 'Failed to update group status');
       }
     } catch (error) {
       console.error('Group action failed:', error);
+      alert('Network error. Please try again.');
     }
+    setActionLoading(false);
+  };
+
+  const handleReject = (groupId) => {
+    setRejectionModal({ open: true, groupId });
+    setRejectionReason('');
+  };
+
+  const confirmReject = () => {
+    if (!rejectionReason.trim()) {
+      alert('Please provide a reason for rejection');
+      return;
+    }
+    handleGroupAction(rejectionModal.groupId, 'REJECTED', rejectionReason);
   };
 
   const getStatusColor = (status) => {
@@ -169,14 +198,16 @@ const FacultyDashboard = ({ user, onLogout }) => {
                       <div className="flex space-x-4">
                         <button
                           onClick={() => handleGroupAction(group.groupId, 'APPROVED')}
-                          className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 flex items-center gap-2"
+                          disabled={actionLoading}
+                          className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 flex items-center gap-2 disabled:opacity-50"
                         >
                           <Check className="w-4 h-4" />
-                          Approve
+                          {actionLoading ? 'Processing...' : 'Approve'}
                         </button>
                         <button
-                          onClick={() => handleGroupAction(group.groupId, 'REJECTED')}
-                          className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 flex items-center gap-2"
+                          onClick={() => handleReject(group.groupId)}
+                          disabled={actionLoading}
+                          className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 flex items-center gap-2 disabled:opacity-50"
                         >
                           <X className="w-4 h-4" />
                           Reject
@@ -291,6 +322,50 @@ const FacultyDashboard = ({ user, onLogout }) => {
           </div>
         </div>
       </div>
+
+      {/* Rejection Modal */}
+      {rejectionModal.open && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black max-w-md w-full mx-4">
+            <h3 className="text-2xl font-black text-gray-900 mb-4 flex items-center gap-2">
+              <X className="w-6 h-6 text-red-500" />
+              Reject Group Request
+            </h3>
+            <p className="text-gray-600 mb-6 font-semibold">
+              Please provide a reason for rejecting this group request. This will help students understand what needs to be improved.
+            </p>
+            <textarea
+              value={rejectionReason}
+              onChange={(e) => setRejectionReason(e.target.value)}
+              placeholder="Enter the reason for rejection (e.g., unclear project description, inappropriate team composition, missing technical details, etc.)"
+              className="w-full p-4 border-3 border-gray-300 rounded-2xl focus:border-red-500 focus:outline-none font-semibold resize-none"
+              rows="4"
+              maxLength="500"
+            />
+            <div className="text-sm text-gray-500 mb-6">
+              {rejectionReason.length}/500 characters
+            </div>
+            <div className="flex space-x-4">
+              <button
+                onClick={() => {
+                  setRejectionModal({ open: false, groupId: null });
+                  setRejectionReason('');
+                }}
+                className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-2xl border-3 border-black transition-all duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmReject}
+                disabled={!rejectionReason.trim() || actionLoading}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-2xl border-3 border-black transition-all duration-200 disabled:opacity-50"
+              >
+                {actionLoading ? 'Rejecting...' : 'Confirm Reject'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

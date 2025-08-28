@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { 
   Users, 
   Rocket, 
@@ -22,6 +22,9 @@ const MyGroup = ({ user, onLogout }) => {
   const [group, setGroup] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchGroupData();
@@ -46,6 +49,28 @@ const MyGroup = ({ user, onLogout }) => {
     setLoading(false);
   };
 
+  const handleDeleteGroup = async () => {
+    setDeleteLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch(`http://localhost:5001/api/groups/${group.groupId}/delete`, {
+        method: 'DELETE',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        navigate('/student-dashboard');
+      } else {
+        const errorData = await response.json();
+        alert(errorData.message || 'Failed to delete group');
+      }
+    } catch (error) {
+      console.error('Delete group failed:', error);
+      alert('Network error. Please try again.');
+    }
+    setDeleteLoading(false);
+  };
+
   const getStatusColor = (status) => {
     switch (status) {
       case 'PENDING': return 'bg-yellow-100 text-yellow-800 border-yellow-500';
@@ -59,7 +84,7 @@ const MyGroup = ({ user, onLogout }) => {
     switch (status) {
       case 'PENDING': return 'Your group is waiting for faculty approval. You will be notified once approved.';
       case 'ACTIVE': return 'Congratulations! Your group has been approved and is now active.';
-      case 'REJECTED': return 'Unfortunately, your group request was rejected. Please contact your faculty for more information.';
+      case 'REJECTED': return 'Unfortunately, your group request was rejected. Please check the rejection reason below and create a new group with improvements.';
       default: return '';
     }
   };
@@ -146,7 +171,54 @@ const MyGroup = ({ user, onLogout }) => {
                   </>
                 )}
               </h3>
-              <p className="font-semibold">{getStatusMessage(group.status)}</p>
+              <p className="font-semibold mb-3">{getStatusMessage(group.status)}</p>
+              
+              {group.status === 'REJECTED' && group.rejectionReason && (
+                <div className="bg-white p-4 rounded-2xl border-2 border-red-400 mt-4">
+                  <h4 className="font-bold text-red-800 mb-2">Faculty Feedback:</h4>
+                  <p className="text-red-700 font-semibold whitespace-pre-line">{group.rejectionReason}</p>
+                </div>
+              )}
+              
+              {group.status === 'REJECTED' && (
+                <div className="mt-6 flex space-x-4">
+                  <Link
+                    to={`/create-group?edit=${group.groupId}`}
+                    className="bg-green-500 hover:bg-green-600 text-white font-black py-3 px-6 rounded-2xl border-3 border-black shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 flex items-center gap-2"
+                  >
+                    Recreate Group
+                  </Link>
+                  {/* <Link
+                    to="/create-group"
+                    className="bg-blue-500 hover:bg-blue-600 text-white font-black py-3 px-6 rounded-2xl border-3 border-black shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 flex items-center gap-2"
+                  >
+                    <Rocket className="w-5 h-5" />
+                    Start Fresh
+                  </Link> */}
+                  <button
+                    onClick={() => setShowDeleteModal(true)}
+                    className="bg-red-500 hover:bg-red-600 text-white font-black py-3 px-6 rounded-2xl border-3 border-black shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 flex items-center gap-2"
+                  >
+                    <X className="w-5 h-5" />
+                    Delete
+                  </button>
+                </div>
+              )}
+              
+              {group.status === 'PENDING' && (
+                <div className="mt-6 flex space-x-4">
+                  <button
+                    onClick={() => setShowDeleteModal(true)}
+                    className="bg-red-500 hover:bg-red-600 text-white font-black py-3 px-6 rounded-2xl border-3 border-black shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 flex items-center gap-2"
+                  >
+                    <X className="w-5 h-5" />
+                    Delete Group
+                  </button>
+                  <div className="bg-gray-100 p-3 rounded-2xl border-2 border-gray-300 text-gray-600 text-sm font-semibold">
+                    💡 You can delete your group while it's pending if you want to create a new one
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
@@ -314,6 +386,36 @@ const MyGroup = ({ user, onLogout }) => {
           </div>
         </div>
       </div>
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black max-w-md w-full mx-4">
+            <h3 className="text-2xl font-black text-gray-900 mb-4 flex items-center gap-2">
+              <X className="w-6 h-6 text-red-500" />
+              Delete Group
+            </h3>
+            <p className="text-gray-600 mb-6 font-semibold">
+              Are you sure you want to delete your group "{group?.title}"? This action cannot be undone and all group members will be notified.
+            </p>
+            <div className="flex space-x-4">
+              <button
+                onClick={() => setShowDeleteModal(false)}
+                className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-bold py-3 px-4 rounded-2xl border-3 border-black transition-all duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteGroup}
+                disabled={deleteLoading}
+                className="flex-1 bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-4 rounded-2xl border-3 border-black transition-all duration-200 disabled:opacity-50"
+              >
+                {deleteLoading ? 'Deleting...' : 'Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
