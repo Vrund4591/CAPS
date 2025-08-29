@@ -153,7 +153,7 @@ const StudentDashboard = ({ user, onLogout }) => {
                         <span className="font-bold text-gray-700">Faculty:</span> {myGroup.faculty.user.name}
                       </div>
                       <div>
-                        <span className="font-bold text-gray-700">Members:</span> {myGroup.members.length}
+                        <span className="font-bold text-gray-700">Members:</span> {myGroup.members.length}/4
                       </div>
                     </div>
                     

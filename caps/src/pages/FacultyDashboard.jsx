@@ -8,9 +8,24 @@ import {
   Users,
   BarChart3,
   Bell,
-  Mail
+  Mail,
+  Search,
+  Filter,
+  Eye,
+  Calendar,
+  FileText,
+  Award,
+  TrendingUp,
+  UserCheck,
+  AlertCircle,
+  ChevronDown,
+  ChevronUp,
+  Download,
+  RefreshCw
 } from 'lucide-react';
 import Header from '../components/Header';
+import AnnouncementModal from '../components/AnnouncementModal';
+import GroupEditModal from '../components/GroupEditModal';
 
 const FacultyDashboard = ({ user, onLogout }) => {
   const [groups, setGroups] = useState([]);
@@ -19,6 +34,17 @@ const FacultyDashboard = ({ user, onLogout }) => {
   const [rejectionModal, setRejectionModal] = useState({ open: false, groupId: null });
   const [rejectionReason, setRejectionReason] = useState('');
   const [actionLoading, setActionLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [projectTypeFilter, setProjectTypeFilter] = useState('ALL');
+  const [sortBy, setSortBy] = useState('createdAt');
+  const [sortOrder, setSortOrder] = useState('desc');
+  const [viewMode, setViewMode] = useState('cards'); // 'cards' or 'table'
+  const [selectedGroup, setSelectedGroup] = useState(null);
+  const [showGroupDetails, setShowGroupDetails] = useState(false);
+  const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingGroup, setEditingGroup] = useState(null);
 
   useEffect(() => {
     fetchDashboardData();
@@ -43,7 +69,7 @@ const FacultyDashboard = ({ user, onLogout }) => {
       });
       if (notificationResponse.ok) {
         const notificationData = await notificationResponse.json();
-        setNotifications(notificationData.notifications.slice(0, 5));
+        setNotifications(notificationData.notifications.slice(0, 10));
       }
 
     } catch (error) {
@@ -107,6 +133,50 @@ const FacultyDashboard = ({ user, onLogout }) => {
     }
   };
 
+  const handleEditGroup = (group) => {
+    setEditingGroup(group);
+    setShowEditModal(true);
+  };
+
+  const handleGroupUpdated = (updatedGroup) => {
+    // Refresh the dashboard data
+    fetchDashboardData();
+  };
+
+  // Filter and sort groups
+  const filteredAndSortedGroups = groups
+    .filter(group => {
+      const matchesSearch = searchTerm === '' || 
+        group.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        group.groupId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        group.teamLeader.user.name.toLowerCase().includes(searchTerm.toLowerCase());
+      
+      const matchesStatus = statusFilter === 'ALL' || group.status === statusFilter;
+      const matchesProjectType = projectTypeFilter === 'ALL' || group.projectType === projectTypeFilter;
+      
+      return matchesSearch && matchesStatus && matchesProjectType;
+    })
+    .sort((a, b) => {
+      let aValue = a[sortBy];
+      let bValue = b[sortBy];
+      
+      if (sortBy === 'createdAt') {
+        aValue = new Date(aValue);
+        bValue = new Date(bValue);
+      }
+      
+      if (sortOrder === 'asc') {
+        return aValue > bValue ? 1 : -1;
+      } else {
+        return aValue < bValue ? 1 : -1;
+      }
+    });
+
+  const pendingGroups = groups.filter(group => group.status === 'PENDING');
+  const activeGroups = groups.filter(group => group.status === 'ACTIVE');
+  const rejectedGroups = groups.filter(group => group.status === 'REJECTED');
+  const totalStudents = groups.reduce((sum, group) => sum + group.members.length, 0);
+
   if (loading) {
     return (
       <div className="min-h-screen" style={{backgroundColor: '#FFFFF4'}}>
@@ -121,9 +191,6 @@ const FacultyDashboard = ({ user, onLogout }) => {
     );
   }
 
-  const pendingGroups = groups.filter(group => group.status === 'PENDING');
-  const activeGroups = groups.filter(group => group.status === 'ACTIVE');
-
   return (
     <div className="min-h-screen" style={{backgroundColor: '#FFFFF4'}}>
       <Header user={user} onLogout={onLogout} hasGroup={false} />
@@ -131,190 +198,397 @@ const FacultyDashboard = ({ user, onLogout }) => {
       <div className="container mx-auto px-6 py-8">
         {/* Welcome Section */}
         <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black mb-8">
-          <h1 className="text-4xl font-black text-gray-900 mb-2 flex items-center gap-3">
-            Welcome, Prof. {user.name}! 
-            <GraduationCap className="w-10 h-10 text-blue-500" />
-          </h1>
-          <p className="text-xl text-gray-600 font-semibold">
-            Manage student groups and oversee project assignments
-          </p>
+          <div className="flex justify-between items-center">
+            <div>
+              <h1 className="text-4xl font-black text-gray-900 mb-2 flex items-center gap-3">
+                Faculty Dashboard
+                <GraduationCap className="w-10 h-10 text-blue-500" />
+              </h1>
+              <p className="text-xl text-gray-600 font-semibold">
+                Welcome, Prof. {user.name}! Manage student groups and oversee project assignments
+              </p>
+            </div>
+            <button
+              onClick={fetchDashboardData}
+              className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 flex items-center gap-2"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Refresh
+            </button>
+          </div>
         </div>
 
-        <div className="grid lg:grid-cols-3 gap-8">
-          {/* Pending Group Requests */}
-          <div className="lg:col-span-2">
-            <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black mb-8">
-              <h2 className="text-2xl font-black text-gray-900 mb-6 flex items-center gap-2">
-                <Clock className="w-6 h-6 text-yellow-500" />
-                Pending Group Requests ({pendingGroups.length})
-              </h2>
-              
-              {pendingGroups.length > 0 ? (
-                <div className="space-y-6">
-                  {pendingGroups.map((group) => (
-                    <div key={group.id} className="bg-yellow-50 p-6 rounded-2xl border-3 border-yellow-500">
-                      <div className="flex justify-between items-start mb-4">
-                        <div>
-                          <h3 className="text-xl font-bold text-gray-900">{group.title}</h3>
-                          <p className="text-sm text-gray-600">Group ID: {group.groupId}</p>
-                        </div>
-                        <span className={`px-4 py-2 rounded-full border-2 font-bold text-sm ${getStatusColor(group.status)}`}>
-                          {group.status}
-                        </span>
-                      </div>
-                      
-                      <p className="text-gray-700 mb-4">{group.description}</p>
-                      
-                      <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
-                        <div><span className="font-bold">Project Type:</span> {group.projectType}</div>
-                        <div><span className="font-bold">Members:</span> {group.members.length}</div>
-                        <div><span className="font-bold">Team Leader:</span> {group.teamLeader.user.name}</div>
-                        <div><span className="font-bold">Created:</span> {new Date(group.createdAt).toLocaleDateString()}</div>
-                      </div>
+        {/* Statistics Cards */}
+        <div className="grid lg:grid-cols-4 gap-6 mb-8">
+          <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-3xl font-black text-blue-800">{groups.length}</div>
+                <div className="text-blue-700 font-bold">Total Groups</div>
+              </div>
+              <Users className="w-10 h-10 text-blue-600" />
+            </div>
+          </div>
 
-                      {group.frontendTech && (
-                        <div className="mb-4">
-                          <span className="font-bold text-sm">Frontend:</span> {group.frontendTech}
-                        </div>
-                      )}
-                      
-                      {group.backendTech && (
-                        <div className="mb-4">
-                          <span className="font-bold text-sm">Backend:</span> {group.backendTech}
-                        </div>
-                      )}
+          <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-3xl font-black text-yellow-800">{pendingGroups.length}</div>
+                <div className="text-yellow-700 font-bold">Pending Approval</div>
+              </div>
+              <Clock className="w-10 h-10 text-yellow-600" />
+            </div>
+          </div>
 
-                      <div className="mb-4">
-                        <span className="font-bold text-sm">Team Members:</span>
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {group.members.map((member) => (
-                            <span key={member.id} className={`px-3 py-1 rounded-full text-xs font-bold ${member.isLeader ? 'bg-blue-100 text-blue-800 border-2 border-blue-500' : 'bg-gray-100 text-gray-700 border-2 border-gray-400'}`}>
-                              {member.student.user.name} {member.isLeader && '(Leader)'}
-                            </span>
-                          ))}
-                        </div>
-                      </div>
+          <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-3xl font-black text-green-800">{activeGroups.length}</div>
+                <div className="text-green-700 font-bold">Active Groups</div>
+              </div>
+              <CheckCircle className="w-10 h-10 text-green-600" />
+            </div>
+          </div>
 
-                      <div className="flex space-x-4">
-                        <button
-                          onClick={() => handleGroupAction(group.groupId, 'APPROVED')}
-                          disabled={actionLoading}
-                          className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 flex items-center gap-2 disabled:opacity-50"
-                        >
-                          <Check className="w-4 h-4" />
-                          {actionLoading ? 'Processing...' : 'Approve'}
-                        </button>
-                        <button
-                          onClick={() => handleReject(group.groupId)}
-                          disabled={actionLoading}
-                          className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 flex items-center gap-2 disabled:opacity-50"
-                        >
-                          <X className="w-4 h-4" />
-                          Reject
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+          <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black">
+            <div className="flex items-center justify-between">
+              <div>
+                <div className="text-3xl font-black text-purple-800">{totalStudents}</div>
+                <div className="text-purple-700 font-bold">Total Students</div>
+              </div>
+              <UserCheck className="w-10 h-10 text-purple-600" />
+            </div>
+          </div>
+        </div>
+
+        <div className="grid lg:grid-cols-4 gap-8">
+          {/* Main Group Management */}
+          <div className="lg:col-span-3">
+            <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black">
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-black text-gray-900 flex items-center gap-2">
+                  <BarChart3 className="w-6 h-6 text-blue-500" />
+                  Group Management
+                </h2>
+                <div className="flex space-x-2">
+                  <button
+                    onClick={() => setViewMode(viewMode === 'cards' ? 'table' : 'cards')}
+                    className="bg-gray-200 hover:bg-gray-300 text-gray-800 font-bold py-2 px-4 rounded-2xl border-2 border-gray-400 transition-all duration-200"
+                  >
+                    {viewMode === 'cards' ? 'Table View' : 'Card View'}
+                  </button>
+                  <button className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 flex items-center gap-2">
+                    <Download className="w-4 h-4" />
+                    Export
+                  </button>
                 </div>
+              </div>
+
+              {/* Filters and Search */}
+              <div className="bg-gray-50 p-4 rounded-2xl border-2 border-gray-300 mb-6">
+                <div className="grid md:grid-cols-4 gap-4">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search groups..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none font-semibold"
+                    />
+                  </div>
+
+                  <select
+                    value={statusFilter}
+                    onChange={(e) => setStatusFilter(e.target.value)}
+                    className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none font-semibold"
+                  >
+                    <option value="ALL">All Status</option>
+                    <option value="PENDING">Pending</option>
+                    <option value="ACTIVE">Active</option>
+                    <option value="REJECTED">Rejected</option>
+                  </select>
+
+                  <select
+                    value={projectTypeFilter}
+                    onChange={(e) => setProjectTypeFilter(e.target.value)}
+                    className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none font-semibold"
+                  >
+                    <option value="ALL">All Types</option>
+                    <option value="UDP">UDP</option>
+                    <option value="IDP">IDP</option>
+                  </select>
+
+                  <select
+                    value={`${sortBy}-${sortOrder}`}
+                    onChange={(e) => {
+                      const [field, order] = e.target.value.split('-');
+                      setSortBy(field);
+                      setSortOrder(order);
+                    }}
+                    className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none font-semibold"
+                  >
+                    <option value="createdAt-desc">Newest First</option>
+                    <option value="createdAt-asc">Oldest First</option>
+                    <option value="title-asc">Title A-Z</option>
+                    <option value="title-desc">Title Z-A</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Group Display */}
+              {filteredAndSortedGroups.length > 0 ? (
+                viewMode === 'cards' ? (
+                  <div className="space-y-6">
+                    {filteredAndSortedGroups.map((group) => (
+                      <div key={group.id} className={`p-6 rounded-2xl border-3 ${
+                        group.status === 'PENDING' ? 'bg-yellow-50 border-yellow-500' :
+                        group.status === 'ACTIVE' ? 'bg-green-50 border-green-500' :
+                        'bg-red-50 border-red-500'
+                      }`}>
+                        <div className="flex justify-between items-start mb-4">
+                          <div className="flex-1">
+                            <div className="flex items-center gap-3 mb-2">
+                              <h3 className="text-xl font-bold text-gray-900">{group.title}</h3>
+                              <span className={`px-4 py-1 rounded-full border-2 font-bold text-sm ${getStatusColor(group.status)}`}>
+                                {group.status}
+                              </span>
+                              <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-xs font-bold">
+                                {group.projectType}
+                              </span>
+                            </div>
+                            <p className="text-sm text-gray-600 mb-2">Group ID: {group.groupId}</p>
+                            <p className="text-gray-700 mb-3">{group.description}</p>
+                            
+                            <div className="grid grid-cols-2 gap-4 text-sm">
+                              <div><span className="font-bold">Team Leader:</span> {group.teamLeader.user.name}</div>
+                              <div><span className="font-bold">Members:</span> {group.members.length}/4</div>
+                              <div><span className="font-bold">Created:</span> {new Date(group.createdAt).toLocaleDateString()}</div>
+                              <div>
+                                <span className="font-bold">Tech Stack:</span> 
+                                {group.frontendTech || group.backendTech ? 
+                                  ` ${group.frontendTech || ''} ${group.backendTech || ''}`.trim() : 
+                                  ' Not specified'
+                                }
+                              </div>
+                            </div>
+
+                            <div className="mt-3">
+                              <span className="font-bold text-sm">Team Members:</span>
+                              <div className="mt-1 flex flex-wrap gap-2">
+                                {group.members.map((member) => (
+                                  <span key={member.id} className={`px-2 py-1 rounded-full text-xs font-bold ${
+                                    member.isLeader ? 'bg-blue-100 text-blue-800 border-2 border-blue-500' : 
+                                    'bg-gray-100 text-gray-700 border-2 border-gray-400'
+                                  }`}>
+                                    {member.student.user.name} {member.isLeader && '(Leader)'}
+                                  </span>
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex justify-between items-center">
+                          <div className="flex space-x-2">
+                            <button
+                              onClick={() => {
+                                setSelectedGroup(group);
+                                setShowGroupDetails(true);
+                              }}
+                              className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-2xl border-2 border-black transition-all duration-200 flex items-center gap-2"
+                            >
+                              <Eye className="w-4 h-4" />
+                              View Details
+                            </button>
+                            <button
+                              onClick={() => handleEditGroup(group)}
+                              className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-2xl border-2 border-black transition-all duration-200 flex items-center gap-2"
+                            >
+                              <Users className="w-4 h-4" />
+                              Edit
+                            </button>
+                          </div>
+
+                          {group.status === 'PENDING' && (
+                            <div className="flex space-x-3">
+                              <button
+                                onClick={() => handleGroupAction(group.groupId, 'APPROVED')}
+                                disabled={actionLoading}
+                                className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 flex items-center gap-2 disabled:opacity-50"
+                              >
+                                <Check className="w-4 h-4" />
+                                {actionLoading ? 'Processing...' : 'Approve'}
+                              </button>
+                              <button
+                                onClick={() => handleReject(group.groupId)}
+                                disabled={actionLoading}
+                                className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 flex items-center gap-2 disabled:opacity-50"
+                              >
+                                <X className="w-4 h-4" />
+                                Reject
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {group.status === 'REJECTED' && group.rejectionReason && (
+                          <div className="mt-4 p-3 bg-red-100 rounded-2xl border-2 border-red-300">
+                            <h4 className="font-bold text-red-800 text-sm mb-1">Rejection Reason:</h4>
+                            <p className="text-red-700 text-sm">{group.rejectionReason}</p>
+                          </div>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  // Table view
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead>
+                        <tr className="bg-gray-100 border-b-3 border-gray-300">
+                          <th className="text-left py-3 px-4 font-bold">Group</th>
+                          <th className="text-left py-3 px-4 font-bold">Leader</th>
+                          <th className="text-left py-3 px-4 font-bold">Members</th>
+                          <th className="text-left py-3 px-4 font-bold">Status</th>
+                          <th className="text-left py-3 px-4 font-bold">Type</th>
+                          <th className="text-left py-3 px-4 font-bold">Created</th>
+                          <th className="text-left py-3 px-4 font-bold">Actions</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredAndSortedGroups.map((group) => (
+                          <tr key={group.id} className="border-b border-gray-200 hover:bg-gray-50">
+                            <td className="py-3 px-4">
+                              <div>
+                                <div className="font-bold">{group.title}</div>
+                                <div className="text-sm text-gray-600">{group.groupId}</div>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4">{group.teamLeader.user.name}</td>
+                            <td className="py-3 px-4">{group.members.length}/4</td>
+                            <td className="py-3 px-4">
+                              <span className={`px-2 py-1 rounded-full text-xs font-bold ${getStatusColor(group.status)}`}>
+                                {group.status}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">{group.projectType}</td>
+                            <td className="py-3 px-4">{new Date(group.createdAt).toLocaleDateString()}</td>
+                            <td className="py-3 px-4">
+                              <div className="flex space-x-2">
+                                <button
+                                  onClick={() => {
+                                    setSelectedGroup(group);
+                                    setShowGroupDetails(true);
+                                  }}
+                                  className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-1 px-3 rounded-xl text-xs"
+                                >
+                                  View
+                                </button>
+                                <button
+                                  onClick={() => handleEditGroup(group)}
+                                  className="bg-purple-500 hover:bg-purple-600 text-white font-bold py-1 px-3 rounded-xl text-xs"
+                                >
+                                  Edit
+                                </button>
+                                {group.status === 'PENDING' && (
+                                  <>
+                                    <button
+                                      onClick={() => handleGroupAction(group.groupId, 'APPROVED')}
+                                      className="bg-green-500 hover:bg-green-600 text-white font-bold py-1 px-3 rounded-xl text-xs"
+                                    >
+                                      Approve
+                                    </button>
+                                    <button
+                                      onClick={() => handleReject(group.groupId)}
+                                      className="bg-red-500 hover:bg-red-600 text-white font-bold py-1 px-3 rounded-xl text-xs"
+                                    >
+                                      Reject
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )
               ) : (
-                <div className="text-center py-8">
+                <div className="text-center py-12">
                   <div className="text-6xl mb-4 flex justify-center">
                     <Users className="w-16 h-16 text-gray-400" />
                   </div>
-                  <h3 className="text-xl font-bold text-gray-700 mb-2">No pending requests</h3>
-                  <p className="text-gray-600">All groups have been reviewed</p>
-                </div>
-              )}
-            </div>
-
-            {/* Active Groups */}
-            <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black">
-              <h2 className="text-2xl font-black text-gray-900 mb-6 flex items-center gap-2">
-                <CheckCircle className="w-6 h-6 text-green-500" />
-                Active Groups ({activeGroups.length})
-              </h2>
-              
-              {activeGroups.length > 0 ? (
-                <div className="grid gap-4">
-                  {activeGroups.map((group) => (
-                    <div key={group.id} className="bg-green-50 p-4 rounded-2xl border-3 border-green-500">
-                      <div className="flex justify-between items-center">
-                        <div>
-                          <h3 className="font-bold text-gray-900">{group.title}</h3>
-                          <p className="text-sm text-gray-600">
-                            Leader: {group.teamLeader.user.name} | Members: {group.members.length}
-                          </p>
-                        </div>
-                        <span className={`px-3 py-1 rounded-full border-2 font-bold text-sm ${getStatusColor(group.status)}`}>
-                          {group.status}
-                        </span>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <div className="text-center py-8 text-gray-500">
-                  <div className="text-4xl mb-4 flex justify-center">
-                    <Users className="w-12 h-12" />
-                  </div>
-                  <p className="font-semibold">No active groups yet</p>
+                  <h3 className="text-xl font-bold text-gray-700 mb-2">No groups found</h3>
+                  <p className="text-gray-600">
+                    {searchTerm || statusFilter !== 'ALL' || projectTypeFilter !== 'ALL' 
+                      ? 'Try adjusting your filters' 
+                      : 'No groups have been created yet'}
+                  </p>
                 </div>
               )}
             </div>
           </div>
 
-          {/* Stats & Notifications */}
-          <div className="space-y-8">
-            {/* Quick Stats */}
+          {/* Sidebar */}
+          <div className="space-y-6">
+            {/* Quick Actions */}
             <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black">
-              <h3 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-2">
-                <BarChart3 className="w-5 h-5 text-gray-500" />
-                Quick Stats
+              <h3 className="text-xl font-black text-gray-900 mb-4 flex items-center gap-2">
+                <Award className="w-5 h-5 text-yellow-500" />
+                Quick Actions
               </h3>
-              <div className="space-y-4">
-                <div className="bg-yellow-100 p-4 rounded-2xl border-3 border-yellow-500">
-                  <div className="text-2xl font-black text-yellow-800">{pendingGroups.length}</div>
-                  <div className="text-sm font-bold text-yellow-700">Pending Requests</div>
-                </div>
-                <div className="bg-green-100 p-4 rounded-2xl border-3 border-green-500">
-                  <div className="text-2xl font-black text-green-800">{activeGroups.length}</div>
-                  <div className="text-sm font-bold text-green-700">Active Groups</div>
-                </div>
-                <div className="bg-blue-100 p-4 rounded-2xl border-3 border-blue-500">
-                  <div className="text-2xl font-black text-blue-800">{groups.length}</div>
-                  <div className="text-sm font-bold text-blue-700">Total Groups</div>
-                </div>
+              <div className="space-y-3">
+                <button className="w-full bg-blue-100 hover:bg-blue-200 p-3 rounded-2xl border-2 border-blue-500 font-bold text-blue-800 text-center transition-colors duration-200 flex items-center justify-center gap-2">
+                  <FileText className="w-4 h-4" />
+                  Generate Report
+                </button>
+                <button className="w-full bg-green-100 hover:bg-green-200 p-3 rounded-2xl border-2 border-green-500 font-bold text-green-800 text-center transition-colors duration-200 flex items-center justify-center gap-2">
+                  <TrendingUp className="w-4 h-4" />
+                  View Analytics
+                </button>
+                <button 
+                  onClick={() => setShowAnnouncementModal(true)}
+                  className="w-full bg-purple-100 hover:bg-purple-200 p-3 rounded-2xl border-2 border-purple-500 font-bold text-purple-800 text-center transition-colors duration-200 flex items-center justify-center gap-2"
+                >
+                  <Mail className="w-4 h-4" />
+                  Send Announcement
+                </button>
               </div>
             </div>
 
             {/* Recent Notifications */}
             <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black">
-              <h3 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-2">
+              <h3 className="text-xl font-black text-gray-900 mb-4 flex items-center gap-2">
                 <Bell className="w-5 h-5 text-blue-500" />
-                Recent Notifications
+                Recent Activity
               </h3>
-              <div className="space-y-3">
+              <div className="space-y-3 max-h-80 overflow-y-auto">
                 {notifications.length > 0 ? (
                   notifications.map((notification) => (
                     <div
                       key={notification.id}
                       className={`p-3 rounded-2xl border-2 ${
-                        notification.isRead ? 'bg-gray-50 border-gray-300' : 'bg-blue-50 border-blue-500'
+                        notification.isRead ? 'bg-gray-300 border-gray-300' : 'bg-blue-50 border-blue-500'
                       }`}
                     >
                       <h4 className="font-bold text-sm text-gray-900">{notification.title}</h4>
-                      <p className="text-xs text-gray-600 mt-1">{notification.message}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {new Date(notification.sentAt).toLocaleDateString()}
-                      </p>
+                      <p className="text-xs text-gray-600 mt-1 line-clamp-2">{notification.message}</p>
+                      <div className="flex justify-between items-center mt-2">
+                        <p className="text-xs text-gray-500">
+                          {new Date(notification.sentAt).toLocaleDateString()}
+                        </p>
+                        {!notification.isRead && (
+                          <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
+                        )}
+                      </div>
                     </div>
                   ))
                 ) : (
                   <div className="text-center py-4 text-gray-500">
-                    <div className="text-2xl mb-2 flex justify-center">
-                      <Mail className="w-8 h-8" />
-                    </div>
-                    <p className="text-sm font-semibold">No notifications</p>
+                    <Mail className="w-8 h-8 mx-auto mb-2" />
+                    <p className="text-sm font-semibold">No recent activity</p>
                   </div>
                 )}
               </div>
@@ -322,6 +596,104 @@ const FacultyDashboard = ({ user, onLogout }) => {
           </div>
         </div>
       </div>
+
+      {/* Group Details Modal */}
+      {showGroupDetails && selectedGroup && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-black text-gray-900">Group Details</h3>
+              <button
+                onClick={() => setShowGroupDetails(false)}
+                className="bg-gray-500 hover:bg-gray-600 text-white p-2 rounded-2xl"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="grid md:grid-cols-2 gap-6">
+              <div>
+                <h4 className="font-bold text-lg mb-3">{selectedGroup.title}</h4>
+                <div className="space-y-2 text-sm">
+                  <div><span className="font-bold">Group ID:</span> {selectedGroup.groupId}</div>
+                  <div><span className="font-bold">Status:</span> 
+                    <span className={`ml-2 px-2 py-1 rounded-full text-xs font-bold ${getStatusColor(selectedGroup.status)}`}>
+                      {selectedGroup.status}
+                    </span>
+                  </div>
+                  <div><span className="font-bold">Project Type:</span> {selectedGroup.projectType}</div>
+                  <div><span className="font-bold">Created:</span> {new Date(selectedGroup.createdAt).toLocaleDateString()}</div>
+                  <div><span className="font-bold">Frontend:</span> {selectedGroup.frontendTech || 'Not specified'}</div>
+                  <div><span className="font-bold">Backend:</span> {selectedGroup.backendTech || 'Not specified'}</div>
+                </div>
+                
+                <div className="mt-4">
+                  <h5 className="font-bold mb-2">Description:</h5>
+                  <p className="text-sm text-gray-700 bg-gray-50 p-3 rounded-2xl">{selectedGroup.description}</p>
+                </div>
+              </div>
+              
+              <div>
+                <h5 className="font-bold text-lg mb-3">Team Members ({selectedGroup.members.length}/4)</h5>
+                <div className="space-y-3">
+                  {selectedGroup.members.map((member) => (
+                    <div key={member.id} className={`p-3 rounded-2xl border-2 ${
+                      member.isLeader ? 'bg-blue-50 border-blue-500' : 'bg-gray-50 border-gray-300'
+                    }`}>
+                      <div className="flex items-center justify-between">
+                        <div>
+                          <h6 className="font-bold text-sm">{member.student.user.name}</h6>
+                          <p className="text-xs text-gray-600">{member.student.user.email}</p>
+                          <p className="text-xs text-gray-600">
+                            {member.student.enrollmentNo} | {member.student.class}-{member.student.division}
+                          </p>
+                        </div>
+                        {member.isLeader && (
+                          <span className="bg-blue-200 text-blue-800 text-xs font-bold px-2 py-1 rounded-full">
+                            Leader
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+            
+            {selectedGroup.status === 'REJECTED' && selectedGroup.rejectionReason && (
+              <div className="mt-6 p-4 bg-red-50 rounded-2xl border-2 border-red-300">
+                <h5 className="font-bold text-red-800 mb-2">Rejection Reason:</h5>
+                <p className="text-red-700 text-sm whitespace-pre-line">{selectedGroup.rejectionReason}</p>
+              </div>
+            )}
+            
+            {selectedGroup.status === 'PENDING' && (
+              <div className="mt-6 flex space-x-4">
+                <button
+                  onClick={() => {
+                    handleGroupAction(selectedGroup.groupId, 'APPROVED');
+                    setShowGroupDetails(false);
+                  }}
+                  className="bg-green-500 hover:bg-green-600 text-white font-bold py-3 px-6 rounded-2xl border-3 border-black transition-all duration-200 flex items-center gap-2"
+                >
+                  <Check className="w-4 h-4" />
+                  Approve Group
+                </button>
+                <button
+                  onClick={() => {
+                    setShowGroupDetails(false);
+                    handleReject(selectedGroup.groupId);
+                  }}
+                  className="bg-red-500 hover:bg-red-600 text-white font-bold py-3 px-6 rounded-2xl border-3 border-black transition-all duration-200 flex items-center gap-2"
+                >
+                  <X className="w-4 h-4" />
+                  Reject Group
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Rejection Modal */}
       {rejectionModal.open && (
@@ -332,7 +704,7 @@ const FacultyDashboard = ({ user, onLogout }) => {
               Reject Group Request
             </h3>
             <p className="text-gray-600 mb-6 font-semibold">
-              Please provide a reason for rejecting this group request. This will help students understand what needs to be improved.
+              Please provide a detailed reason for rejecting this group request. This will help students understand what needs to be improved.
             </p>
             <textarea
               value={rejectionReason}
@@ -366,6 +738,25 @@ const FacultyDashboard = ({ user, onLogout }) => {
           </div>
         </div>
       )}
+
+      {/* Group Edit Modal */}
+      <GroupEditModal
+        isOpen={showEditModal}
+        onClose={() => {
+          setShowEditModal(false);
+          setEditingGroup(null);
+        }}
+        group={editingGroup}
+        onGroupUpdated={handleGroupUpdated}
+      />
+
+      {/* Announcement Modal */}
+      <AnnouncementModal
+        isOpen={showAnnouncementModal}
+        onClose={() => setShowAnnouncementModal(false)}
+        groups={groups}
+        user={user}
+      />
     </div>
   );
 };

@@ -59,4 +59,26 @@ router.post('/authorize', authenticateToken, authorizeRoles('ADMIN'), async (req
   }
 });
 
+// Get user statistics (Admin only)
+router.get('/stats', authenticateToken, authorizeRoles('ADMIN'), async (req, res) => {
+  try {
+    const totalUsers = await prisma.user.count();
+    const totalStudents = await prisma.student.count();
+    const totalFaculty = await prisma.faculty.count();
+    const totalAdmins = await prisma.user.count({
+      where: { role: 'ADMIN' }
+    });
+
+    res.json({
+      totalUsers,
+      totalStudents,
+      totalFaculty,
+      totalAdmins
+    });
+  } catch (error) {
+    console.error('Get user stats error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;

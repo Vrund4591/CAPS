@@ -38,6 +38,15 @@ const AdminDashboard = ({ user, onLogout }) => {
     try {
       const token = localStorage.getItem('token');
       
+      // Fetch user statistics
+      const usersResponse = await fetch('http://localhost:5001/api/users/stats', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      let userStats = { totalUsers: 0 };
+      if (usersResponse.ok) {
+        userStats = await usersResponse.json();
+      }
+      
       // Fetch all groups for stats
       const groupsResponse = await fetch('http://localhost:5001/api/groups', {
         headers: { 'Authorization': `Bearer ${token}` }
@@ -47,10 +56,10 @@ const AdminDashboard = ({ user, onLogout }) => {
         const groups = groupsData.groups;
         
         setStats({
+          totalUsers: userStats.totalUsers,
           totalGroups: groups.length,
           pendingGroups: groups.filter(g => g.status === 'PENDING').length,
-          activeGroups: groups.filter(g => g.status === 'ACTIVE').length,
-          totalUsers: 0 // This would need a separate endpoint
+          activeGroups: groups.filter(g => g.status === 'ACTIVE').length
         });
       }
 
@@ -170,14 +179,14 @@ const AdminDashboard = ({ user, onLogout }) => {
                   </div>
                 </div>
 
-                <div className="bg-purple-100 p-6 rounded-2xl border-3 border-purple-500">
+                <div className="bg-red-100 p-6 rounded-2xl border-3 border-red-500">
                   <div className="flex items-center justify-between">
                     <div>
-                      <div className="text-3xl font-black text-purple-800">∞</div>
-                      <div className="text-purple-700 font-bold">System Health</div>
+                      <div className="text-3xl font-black text-red-800">{stats.totalUsers}</div>
+                      <div className="text-red-700 font-bold">Total Users</div>
                     </div>
                     <div className="text-4xl">
-                      <Heart className="w-10 h-10 text-purple-600" />
+                      <Users className="w-10 h-10 text-red-600" />
                     </div>
                   </div>
                 </div>

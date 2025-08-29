@@ -264,7 +264,7 @@ const MyGroup = ({ user, onLogout }) => {
               <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black">
                 <h2 className="text-2xl font-black text-gray-900 mb-6 flex items-center gap-2">
                   <Users className="w-6 h-6 text-blue-500" />
-                  Team Members
+                  Team Members ({group.members.length}/4)
                 </h2>
                 
                 <div className="grid md:grid-cols-2 gap-6">
@@ -327,6 +327,15 @@ const MyGroup = ({ user, onLogout }) => {
                   Quick Actions
                 </h3>
                 <div className="space-y-3">
+                  {group.status === 'ACTIVE' && (
+                    <div className="bg-green-100 p-3 rounded-2xl border-2 border-green-500 text-center">
+                      <div className="text-2xl mb-2 flex justify-center">
+                        <FileText className="w-6 h-6 text-green-600" />
+                      </div>
+                      <div className="font-bold text-green-800 text-sm mb-2">Project Active</div>
+                      <div className="text-xs text-green-700">Your group is approved and ready for project work!</div>
+                    </div>
+                  )}
                   <div className="bg-blue-100 p-3 rounded-2xl border-2 border-blue-500 text-center">
                     <div className="text-2xl mb-2 flex justify-center">
                       <FileText className="w-6 h-6 text-blue-600" />

@@ -740,7 +740,7 @@ const CreateGroup = ({ user, onLogout }) => {
                 )}
 
                 <div className="mt-6 text-sm text-green-700 font-semibold">
-                  Selected: {formData.teamMemberIds.length}/3 members
+                  Selected: {formData.teamMemberIds.length}/3 additional members (Total group size: {formData.teamMemberIds.length + 1}/4)
                   {isEditing && originalGroup && (
                     <div className="mt-2 text-xs">
                       <span className="inline-block bg-yellow-100 text-yellow-800 px-2 py-1 rounded mr-2">

@@ -540,4 +540,284 @@ router.post('/rejected-group-members', authenticateToken, authorizeRoles('STUDEN
   }
 });
 
+// Get email addresses for selected groups (Faculty only)
+router.post('/emails', authenticateToken, authorizeRoles('FACULTY'), async (req, res) => {
+  try {
+    const { groupIds } = req.body;
+    const facultyId = req.user.faculty.id;
+
+    if (!groupIds || !Array.isArray(groupIds) || groupIds.length === 0) {
+      return res.status(400).json({ message: 'Group IDs are required' });
+    }
+
+    // Get all group members from the selected groups that belong to this faculty
+    const groups = await prisma.group.findMany({
+      where: {
+        id: { in: groupIds },
+        facultyId: facultyId // Ensure faculty can only get emails from their own groups
+      },
+      include: {
+        members: {
+          include: {
+            student: {
+              include: {
+                user: {
+                  select: { email: true }
+                }
+              }
+            }
+          }
+        }
+      }
+    });
+
+    // Extract unique email addresses
+    const emailSet = new Set();
+    groups.forEach(group => {
+      group.members.forEach(member => {
+        emailSet.add(member.student.user.email);
+      });
+    });
+
+    const emails = Array.from(emailSet).sort();
+
+    res.json({ 
+      emails,
+      groupCount: groups.length,
+      studentCount: emails.length
+    });
+
+  } catch (error) {
+    console.error('Get group emails error:', error);
+    res.status(500).json({ message: 'Server error while fetching email addresses' });
+  }
+});
+
+// Get available students for faculty (includes all students)
+router.get('/available-students-faculty', authenticateToken, authorizeRoles('FACULTY'), async (req, res) => {
+  try {
+    // Get all students (not just available ones) so faculty can reassign
+    const allStudents = await prisma.student.findMany({
+      include: {
+        user: {
+          select: { id: true, name: true, email: true }
+        },
+        groupMember: {
+          include: {
+            group: {
+              select: { id: true, title: true, status: true }
+            }
+          }
+        }
+      }
+    });
+
+    res.json({ students: allStudents });
+  } catch (error) {
+    console.error('Get all students error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Update group information and members (Faculty only)
+router.put('/:groupId/update-faculty', authenticateToken, authorizeRoles('FACULTY'), async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { title, description, projectType, frontendTech, backendTech, status, members } = req.body;
+    const facultyId = req.user.faculty.id;
+
+    // Validate required fields
+    if (!title || !description || !projectType || !members || members.length === 0) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    // Validate status
+    if (!['PENDING', 'ACTIVE', 'REJECTED'].includes(status)) {
+      return res.status(400).json({ message: 'Invalid status' });
+    }
+
+    // Find the group and verify faculty ownership
+    const existingGroup = await prisma.group.findFirst({
+      where: { groupId, facultyId },
+      include: {
+        members: {
+          include: {
+            student: {
+              include: { user: true }
+            }
+          }
+        }
+      }
+    });
+
+    if (!existingGroup) {
+      return res.status(404).json({ message: 'Group not found or you are not authorized to modify this group' });
+    }
+
+    // Validate team size
+    if (members.length > 4) {
+      return res.status(400).json({ message: 'Maximum 4 members allowed in a group' });
+    }
+
+    // Ensure there's exactly one leader
+    const leaders = members.filter(member => member.isLeader);
+    if (leaders.length !== 1) {
+      return res.status(400).json({ message: 'Group must have exactly one leader' });
+    }
+
+    // Validate all student IDs exist
+    const studentIds = members.map(member => member.studentId);
+    const existingStudents = await prisma.student.findMany({
+      where: { id: { in: studentIds } },
+      include: {
+        user: { select: { id: true, name: true, email: true } },
+        groupMember: {
+          include: {
+            group: { select: { id: true, groupId: true, title: true } }
+          }
+        }
+      }
+    });
+
+    if (existingStudents.length !== studentIds.length) {
+      return res.status(400).json({ message: 'Some selected students do not exist' });
+    }
+
+    // Check for conflicts with other groups (excluding current group)
+    const conflictingStudents = existingStudents.filter(student => 
+      student.groupMember && student.groupMember.group.id !== existingGroup.id
+    );
+
+    if (conflictingStudents.length > 0) {
+      const conflictDetails = conflictingStudents.map(student => 
+        `${student.user.name} is already in group ${student.groupMember.group.groupId}`
+      ).join(', ');
+      return res.status(400).json({ 
+        message: `Cannot add students: ${conflictDetails}` 
+      });
+    }
+
+    // Update group and members in transaction
+    const updatedGroup = await prisma.$transaction(async (tx) => {
+      // Update group information
+      const group = await tx.group.update({
+        where: { id: existingGroup.id },
+        data: {
+          title,
+          description,
+          projectType,
+          frontendTech: frontendTech || null,
+          backendTech: backendTech || null,
+          status,
+          teamLeaderId: leaders[0].studentId
+        }
+      });
+
+      // Remove all existing members
+      await tx.groupMember.deleteMany({
+        where: { groupId: existingGroup.id }
+      });
+
+      // Add new members
+      await tx.groupMember.createMany({
+        data: members.map(member => ({
+          studentId: member.studentId,
+          groupId: existingGroup.id,
+          isLeader: member.isLeader
+        }))
+      });
+
+      // Return updated group with members
+      return await tx.group.findUnique({
+        where: { id: existingGroup.id },
+        include: {
+          members: {
+            include: {
+              student: {
+                include: { user: true }
+              }
+            }
+          },
+          faculty: {
+            include: { user: true }
+          },
+          teamLeader: {
+            include: { user: true }
+          }
+        }
+      });
+    });
+
+    // Send notifications to new members
+    const currentMemberEmails = existingGroup.members.map(m => m.student.user.email);
+    const newMemberEmails = existingStudents
+      .filter(student => !currentMemberEmails.includes(student.user.email))
+      .map(student => student.user.email);
+
+    if (newMemberEmails.length > 0) {
+      await prisma.notification.createMany({
+        data: newMemberEmails.map(email => ({
+          title: 'Added to Group',
+          message: `You have been added to group "${title}" by Prof. ${req.user.name}.`,
+          type: 'GROUP_UPDATED',
+          recipientEmail: email
+        }))
+      });
+    }
+
+    // Send notifications to removed members
+    const newMemberEmails_set = new Set(existingStudents.map(s => s.user.email));
+    const removedMemberEmails = currentMemberEmails.filter(email => !newMemberEmails_set.has(email));
+
+    if (removedMemberEmails.length > 0) {
+      await prisma.notification.createMany({
+        data: removedMemberEmails.map(email => ({
+          title: 'Removed from Group',
+          message: `You have been removed from group "${existingGroup.title}" by Prof. ${req.user.name}. You are now available to join other groups.`,
+          type: 'GROUP_UPDATED',
+          recipientEmail: email
+        }))
+      });
+    }
+
+    // Send status change notification to all current members if status changed
+    if (existingGroup.status !== status) {
+      const allCurrentEmails = existingStudents.map(student => student.user.email);
+      let statusMessage = '';
+      
+      switch (status) {
+        case 'ACTIVE':
+          statusMessage = `Your group "${title}" has been approved and is now active!`;
+          break;
+        case 'PENDING':
+          statusMessage = `Your group "${title}" status has been changed to pending review.`;
+          break;
+        case 'REJECTED':
+          statusMessage = `Your group "${title}" has been rejected. Please contact your faculty for details.`;
+          break;
+      }
+
+      if (statusMessage && allCurrentEmails.length > 0) {
+        await prisma.notification.createMany({
+          data: allCurrentEmails.map(email => ({
+            title: 'Group Status Updated',
+            message: statusMessage,
+            type: 'GROUP_STATUS_CHANGED',
+            recipientEmail: email
+          }))
+        });
+      }
+    }
+
+    res.json({
+      message: 'Group updated successfully',
+      group: updatedGroup
+    });
+
+  } catch (error) {
+    console.error('Update group error:', error);
+    res.status(500).json({ message: 'Server error while updating group' });
+  }
+});
+
 module.exports = router;
