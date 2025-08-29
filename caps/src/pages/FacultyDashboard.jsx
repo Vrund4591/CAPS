@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import React, { useState, useEffect } from 'react';
 import { 
   GraduationCap, 
@@ -55,21 +56,37 @@ const FacultyDashboard = ({ user, onLogout }) => {
       const token = localStorage.getItem('token');
       
       // Fetch faculty groups
-      const groupsResponse = await fetch('http://localhost:5001/api/groups', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (groupsResponse.ok) {
-        const groupsData = await groupsResponse.json();
-        setGroups(groupsData.groups);
+      try {
+        const groupsResponse = await fetch('http://localhost:5001/api/groups', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (groupsResponse.ok) {
+          const groupsData = await groupsResponse.json();
+          setGroups(groupsData.groups || []);
+        } else {
+          console.error('Error fetching groups:', groupsResponse.status);
+          setGroups([]);
+        }
+      } catch (error) {
+        console.error('Groups fetch error:', error);
+        setGroups([]);
       }
 
       // Fetch notifications
-      const notificationResponse = await fetch('http://localhost:5001/api/notifications', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (notificationResponse.ok) {
-        const notificationData = await notificationResponse.json();
-        setNotifications(notificationData.notifications.slice(0, 10));
+      try {
+        const notificationResponse = await fetch('http://localhost:5001/api/notifications', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (notificationResponse.ok) {
+          const notificationData = await notificationResponse.json();
+          setNotifications(notificationData.notifications?.slice(0, 10) || []);
+        } else {
+          console.error('Error fetching notifications:', notificationResponse.status);
+          setNotifications([]);
+        }
+      } catch (error) {
+        console.error('Notifications fetch error:', error);
+        setNotifications([]);
       }
 
     } catch (error) {

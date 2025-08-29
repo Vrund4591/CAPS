@@ -820,4 +820,358 @@ router.put('/:groupId/update-faculty', authenticateToken, authorizeRoles('FACULT
   }
 });
 
+// Get all groups with advanced filtering (Admin/Faculty)
+router.get('/admin/all', authenticateToken, authorizeRoles('ADMIN', 'FACULTY'), async (req, res) => {
+  try {
+    const { 
+      status, 
+      projectType, 
+      facultyId, 
+      department,
+      page = 1, 
+      limit = 20,
+      sortBy = 'createdAt',
+      sortOrder = 'desc',
+      search = ''
+    } = req.query;
+
+    const skip = (page - 1) * limit;
+    const whereClause = {};
+
+    if (status && status !== 'ALL') whereClause.status = status;
+    if (projectType && projectType !== 'ALL') whereClause.projectType = projectType;
+    if (facultyId) whereClause.facultyId = parseInt(facultyId);
+    if (department && department !== 'ALL') {
+      whereClause.faculty = {
+        department: department
+      };
+    }
+
+    // Add search functionality
+    if (search && search.trim()) {
+      whereClause.OR = [
+        { title: { contains: search, mode: 'insensitive' } },
+        { groupId: { contains: search, mode: 'insensitive' } },
+        { description: { contains: search, mode: 'insensitive' } },
+        {
+          teamLeader: {
+            user: {
+              name: { contains: search, mode: 'insensitive' }
+            }
+          }
+        }
+      ];
+    }
+
+    const orderBy = {};
+    orderBy[sortBy] = sortOrder;
+
+    const groups = await prisma.group.findMany({
+      where: whereClause,
+      include: {
+        members: {
+          include: {
+            student: {
+              include: { user: true }
+            }
+          }
+        },
+        teamLeader: {
+          include: { user: true }
+        },
+        faculty: {
+          include: { user: true }
+        }
+      },
+      skip: parseInt(skip),
+      take: parseInt(limit),
+      orderBy
+    });
+
+    const totalGroups = await prisma.group.count({ where: whereClause });
+
+    res.json({
+      groups,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages: Math.ceil(totalGroups / limit),
+        totalGroups,
+        hasNext: page * limit < totalGroups,
+        hasPrev: page > 1
+      }
+    });
+  } catch (error) {
+    console.error('Get all groups error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Force delete group (Admin only)
+router.delete('/admin/:groupId/force-delete', authenticateToken, authorizeRoles('ADMIN'), async (req, res) => {
+  try {
+    const { groupId } = req.params;
+
+    // First check if group exists
+    const group = await prisma.group.findUnique({
+      where: { groupId }
+    });
+
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found' });
+    }
+
+    // Delete all related records first
+    await prisma.groupMember.deleteMany({
+      where: { groupId: group.id }
+    });
+
+    await prisma.notification.deleteMany({
+      where: { 
+        OR: [
+          { title: { contains: groupId } },
+          { message: { contains: groupId } }
+        ]
+      }
+    });
+
+    const deletedGroup = await prisma.group.delete({
+      where: { groupId }
+    });
+
+    res.json({ 
+      message: 'Group force deleted successfully',
+      group: deletedGroup
+    });
+  } catch (error) {
+    console.error('Force delete group error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Transfer group to different faculty (Admin only)
+router.patch('/admin/:groupId/transfer-faculty', authenticateToken, authorizeRoles('ADMIN'), async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { newFacultyId, reason } = req.body;
+
+    const group = await prisma.group.findUnique({
+      where: { groupId },
+      include: {
+        faculty: { include: { user: true } },
+        members: { include: { student: { include: { user: true } } } }
+      }
+    });
+
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found' });
+    }
+
+    const newFaculty = await prisma.faculty.findUnique({
+      where: { id: parseInt(newFacultyId) },
+      include: { user: true }
+    });
+
+    if (!newFaculty) {
+      return res.status(404).json({ message: 'Faculty not found' });
+    }
+
+    const updatedGroup = await prisma.group.update({
+      where: { groupId },
+      data: { facultyId: parseInt(newFacultyId) },
+      include: {
+        faculty: { include: { user: true } },
+        members: { include: { student: { include: { user: true } } } }
+      }
+    });
+
+    // Send notifications to all group members
+    const notifications = group.members.map(member => ({
+      userId: member.student.user.id,
+      title: 'Faculty Changed',
+      message: `Your group "${group.title}" has been transferred from Prof. ${group.faculty.user.name} to Prof. ${newFaculty.user.name}.\n\nReason: ${reason || 'Administrative decision'}`,
+      type: 'GROUP_UPDATE'
+    }));
+
+    await prisma.notification.createMany({
+      data: notifications
+    });
+
+    res.json({
+      message: 'Group transferred successfully',
+      group: updatedGroup
+    });
+  } catch (error) {
+    console.error('Transfer group error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get available students for faculty editing (Faculty/Admin only)
+router.get('/available-students-faculty', authenticateToken, authorizeRoles('FACULTY', 'ADMIN'), async (req, res) => {
+  try {
+    const students = await prisma.student.findMany({
+      where: {
+        OR: [
+          { groupMember: null }, // Students not in any group
+          { 
+            groupMember: {
+              group: {
+                status: { in: ['REJECTED', 'PENDING'] } // Students in rejected or pending groups
+              }
+            }
+          }
+        ]
+      },
+      include: {
+        user: {
+          select: { id: true, name: true, email: true }
+        },
+        groupMember: {
+          include: {
+            group: {
+              select: { id: true, title: true, status: true }
+            }
+          }
+        }
+      },
+      orderBy: { user: { name: 'asc' } }
+    });
+
+    res.json({ students });
+  } catch (error) {
+    console.error('Get available students for faculty error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Update group by faculty (Faculty/Admin only)
+router.put('/:groupId/update-faculty', authenticateToken, authorizeRoles('FACULTY', 'ADMIN'), async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { title, description, projectType, frontendTech, backendTech, status, members } = req.body;
+
+    const group = await prisma.group.findUnique({
+      where: { groupId },
+      include: {
+        members: { include: { student: { include: { user: true } } } }
+      }
+    });
+
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found' });
+    }
+
+    // Update group basic information
+    const updatedGroup = await prisma.group.update({
+      where: { groupId },
+      data: {
+        title,
+        description,
+        projectType,
+        frontendTech,
+        backendTech,
+        status
+      }
+    });
+
+    // Handle member updates
+    if (members && Array.isArray(members)) {
+      // Remove all existing members
+      await prisma.groupMember.deleteMany({
+        where: { groupId: group.id }
+      });
+
+      // Add new members
+      const newMembers = members.map(member => ({
+        studentId: member.studentId,
+        groupId: group.id,
+        isLeader: member.isLeader
+      }));
+
+      await prisma.groupMember.createMany({
+        data: newMembers
+      });
+
+      // Update teamLeaderId
+      const leader = members.find(m => m.isLeader);
+      if (leader) {
+        await prisma.group.update({
+          where: { groupId },
+          data: { teamLeaderId: leader.studentId }
+        });
+      }
+    }
+
+    // Fetch updated group with all relations
+    const finalGroup = await prisma.group.findUnique({
+      where: { groupId },
+      include: {
+        members: {
+          include: {
+            student: {
+              include: { user: true }
+            }
+          }
+        },
+        teamLeader: {
+          include: {
+            student: {
+              include: { user: true }
+            }
+          }
+        },
+        faculty: {
+          include: { user: true }
+        }
+      }
+    });
+
+    res.json({
+      message: 'Group updated successfully',
+      group: finalGroup
+    });
+  } catch (error) {
+    console.error('Update group by faculty error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get group member emails for announcements (Faculty/Admin only)
+router.post('/emails', authenticateToken, authorizeRoles('FACULTY', 'ADMIN'), async (req, res) => {
+  try {
+    const { groupIds } = req.body;
+
+    if (!Array.isArray(groupIds) || groupIds.length === 0) {
+      return res.status(400).json({ message: 'Group IDs array is required' });
+    }
+
+    const groups = await prisma.group.findMany({
+      where: { id: { in: groupIds } },
+      include: {
+        members: {
+          include: {
+            student: {
+              include: { user: true }
+            }
+          }
+        }
+      }
+    });
+
+    const emails = [];
+    groups.forEach(group => {
+      group.members.forEach(member => {
+        if (!emails.includes(member.student.user.email)) {
+          emails.push(member.student.user.email);
+        }
+      });
+    });
+
+    res.json({ emails });
+  } catch (error) {
+    console.error('Get group emails error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;

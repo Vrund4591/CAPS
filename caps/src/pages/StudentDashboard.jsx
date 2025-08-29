@@ -39,18 +39,29 @@ const StudentDashboard = ({ user, onLogout }) => {
         if (groupResponse.ok) {
           const groupData = await groupResponse.json();
           setMyGroup(groupData.group);
+        } else if (groupResponse.status !== 404) {
+          console.error('Error fetching group:', groupResponse.status);
         }
-      } catch {
-        // User doesn't have a group yet
+      } catch (error) {
+        console.error('Group fetch error:', error);
+        // User doesn't have a group yet or network error
       }
 
       // Fetch notifications
-      const notificationResponse = await fetch('http://localhost:5001/api/notifications', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (notificationResponse.ok) {
-        const notificationData = await notificationResponse.json();
-        setNotifications(notificationData.notifications.slice(0, 3));
+      try {
+        const notificationResponse = await fetch('http://localhost:5001/api/notifications', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (notificationResponse.ok) {
+          const notificationData = await notificationResponse.json();
+          setNotifications(notificationData.notifications?.slice(0, 3) || []);
+        } else {
+          console.error('Error fetching notifications:', notificationResponse.status);
+          setNotifications([]);
+        }
+      } catch (error) {
+        console.error('Notifications fetch error:', error);
+        setNotifications([]);
       }
 
     } catch (error) {
@@ -150,10 +161,10 @@ const StudentDashboard = ({ user, onLogout }) => {
                         <span className="font-bold text-gray-700">Project Type:</span> {myGroup.projectType}
                       </div>
                       <div>
-                        <span className="font-bold text-gray-700">Faculty:</span> {myGroup.faculty.user.name}
+                        <span className="font-bold text-gray-700">Faculty:</span> {myGroup.faculty?.user?.name || 'Not assigned'}
                       </div>
                       <div>
-                        <span className="font-bold text-gray-700">Members:</span> {myGroup.members.length}/4
+                        <span className="font-bold text-gray-700">Members:</span> {myGroup.members?.length || 0}/4
                       </div>
                     </div>
                     
@@ -265,7 +276,7 @@ const StudentDashboard = ({ user, onLogout }) => {
                     <div
                       key={notification.id}
                       className={`p-3 rounded-2xl border-2 ${
-                        notification.isRead ? 'bg-gray-50 border-gray-300' : 
+                        notification.isRead ? 'bg-gray-300' : 
                         notification.type === 'GROUP_REJECTED' ? 'bg-red-50 border-red-500' :
                         notification.type === 'GROUP_APPROVED' ? 'bg-green-50 border-green-500' :
                         'bg-blue-50 border-blue-500'

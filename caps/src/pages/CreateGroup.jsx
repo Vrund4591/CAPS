@@ -128,7 +128,7 @@ const StudentsGrid = React.memo(({
         const isSelected = formData.teamMemberIds.includes(student.id);
         const wasPreviouslySelected = isEditing && originalGroup && 
           originalGroup.members.some(member => 
-            member.student.id === student.id && !member.isLeader
+            member.student?.id === student.id && !member.isLeader
           );
         
         return (

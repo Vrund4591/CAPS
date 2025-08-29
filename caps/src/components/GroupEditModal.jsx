@@ -18,14 +18,14 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
     projectType: 'UDP',
     frontendTech: '',
     backendTech: '',
-    status: 'PENDING'
+    status: 'PENDING',
+    members: []
   });
   const [availableStudents, setAvailableStudents] = useState([]);
-  const [currentMembers, setCurrentMembers] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [error, setError] = useState('');
+  const [searchTerm, setSearchTerm] = useState(''); // Add missing searchTerm state
 
   useEffect(() => {
     if (isOpen && group) {
@@ -36,11 +36,12 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
         projectType: group.projectType || 'UDP',
         frontendTech: group.frontendTech || '',
         backendTech: group.backendTech || '',
-        status: group.status || 'PENDING'
+        status: group.status || 'PENDING',
+        members: group.members?.map(member => ({
+          studentId: member.student.id,
+          isLeader: member.isLeader
+        })) || []
       });
-      
-      // Initialize current members
-      setCurrentMembers(group.members || []);
       
       // Fetch available students
       fetchAvailableStudents();
@@ -57,7 +58,7 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
 
       if (response.ok) {
         const data = await response.json();
-        setAvailableStudents(data.students);
+        setAvailableStudents(data.students || []);
       }
     } catch (error) {
       console.error('Error fetching available students:', error);
@@ -73,53 +74,52 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
   };
 
   const handleAddMember = (student) => {
-    if (currentMembers.length >= 4) {
+    if (formData.members.length >= 4) {
       setError('Maximum 4 members allowed in a group');
       return;
     }
 
-    if (currentMembers.some(member => member.student.id === student.id)) {
+    if (formData.members.some(member => member.studentId === student.id)) {
       setError('Student is already a member of this group');
       return;
     }
 
     const newMember = {
-      id: Date.now(), // Temporary ID for new members
-      student: student,
-      isLeader: currentMembers.length === 0, // First member becomes leader
-      isNew: true // Flag to identify new members
+      studentId: student.id,
+      isLeader: formData.members.length === 0, // First member becomes leader
     };
 
-    setCurrentMembers([...currentMembers, newMember]);
+    setFormData(prev => ({
+      ...prev,
+      members: [...prev.members, newMember]
+    }));
     setError('');
   };
 
-  const handleRemoveMember = (memberId) => {
-    const memberToRemove = currentMembers.find(m => m.id === memberId);
-    
-    // Don't allow removing if it's the only member
-    if (currentMembers.length === 1) {
-      setError('Group must have at least one member');
-      return;
-    }
-
-    const updatedMembers = currentMembers.filter(m => m.id !== memberId);
+  const handleRemoveMember = (studentId) => {
+    const updatedMembers = formData.members.filter(m => m.studentId !== studentId);
     
     // If removing the leader, make the first remaining member the leader
-    if (memberToRemove?.isLeader && updatedMembers.length > 0) {
+    if (updatedMembers.length > 0 && formData.members.find(m => m.studentId === studentId)?.isLeader) {
       updatedMembers[0].isLeader = true;
     }
 
-    setCurrentMembers(updatedMembers);
+    setFormData(prev => ({
+      ...prev,
+      members: updatedMembers
+    }));
     setError('');
   };
 
-  const handleMakeLeader = (memberId) => {
-    const updatedMembers = currentMembers.map(member => ({
+  const handleMakeLeader = (studentId) => {
+    const updatedMembers = formData.members.map(member => ({
       ...member,
-      isLeader: member.id === memberId
+      isLeader: member.studentId === studentId
     }));
-    setCurrentMembers(updatedMembers);
+    setFormData(prev => ({
+      ...prev,
+      members: updatedMembers
+    }));
   };
 
   const handleSave = async () => {
@@ -129,25 +129,13 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
     try {
       const token = localStorage.getItem('token');
       
-      // Prepare member data
-      const memberData = currentMembers.map(member => ({
-        studentId: member.student.id,
-        isLeader: member.isLeader,
-        isNew: member.isNew || false
-      }));
-
-      const updateData = {
-        ...formData,
-        members: memberData
-      };
-
       const response = await fetch(`http://localhost:5001/api/groups/${group.groupId}/update-faculty`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(updateData)
+        body: JSON.stringify(formData)
       });
 
       if (response.ok) {
@@ -167,13 +155,14 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
 
   const filteredStudents = availableStudents.filter(student => {
     // First filter by search term
-    const matchesSearch = student.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+    const matchesSearch = !searchTerm || 
+      student.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.enrollmentNo.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.class.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.division.toLowerCase().includes(searchTerm.toLowerCase());
     
     // Then exclude students who are already members of this group
-    const isAlreadyMember = currentMembers.some(member => member.student.id === student.id);
+    const isAlreadyMember = formData.members.some(member => member.studentId === student.id);
     
     // Also exclude students who are in other active groups (but allow those in pending/rejected groups)
     const isInOtherActiveGroup = student.groupMember && 
@@ -336,43 +325,50 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
               <div className="bg-green-50 p-6 rounded-2xl border-3 border-green-500">
                 <h3 className="text-lg font-black text-green-900 mb-4 flex items-center gap-2">
                   <Users className="w-5 h-5" />
-                  Current Members ({currentMembers.length}/4)
+                  Current Members ({formData.members.length}/4)
                 </h3>
                 
                 <div className="space-y-3 max-h-60 overflow-y-auto">
-                  {currentMembers.map((member) => (
-                    <div key={member.id} className={`p-3 rounded-xl border-2 ${
-                      member.isLeader ? 'bg-yellow-100 border-yellow-500' : 'bg-white border-gray-300'
-                    }`}>
-                      <div className="flex items-center justify-between">
-                        <div>
-                          <h4 className="font-bold text-sm flex items-center gap-2">
-                            {member.student.user.name}
-                            {member.isLeader && <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">Leader</span>}
-                            {member.isNew && <span className="text-xs bg-green-200 text-green-800 px-2 py-1 rounded-full">New</span>}
-                          </h4>
-                          <p className="text-xs text-gray-600">{member.student.enrollmentNo}</p>
-                          <p className="text-xs text-gray-600">{member.student.class}-{member.student.division}</p>
-                        </div>
-                        <div className="flex space-x-1">
-                          {!member.isLeader && (
+                  {formData.members.map((member) => {
+                    // Find the student data for this member
+                    const studentData = availableStudents.find(s => s.id === member.studentId) || 
+                      group?.members?.find(m => m.student.id === member.studentId)?.student;
+                    
+                    if (!studentData) return null;
+                    
+                    return (
+                      <div key={member.studentId} className={`p-3 rounded-xl border-2 ${
+                        member.isLeader ? 'bg-yellow-100 border-yellow-500' : 'bg-white border-gray-300'
+                      }`}>
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <h4 className="font-bold text-sm flex items-center gap-2">
+                              {studentData.user?.name || studentData.name || 'Unknown'}
+                              {member.isLeader && <span className="text-xs bg-yellow-200 text-yellow-800 px-2 py-1 rounded-full">Leader</span>}
+                            </h4>
+                            <p className="text-xs text-gray-600">{studentData.enrollmentNo || 'N/A'}</p>
+                            <p className="text-xs text-gray-600">{studentData.class || 'N/A'}-{studentData.division || 'N/A'}</p>
+                          </div>
+                          <div className="flex space-x-1">
+                            {!member.isLeader && (
+                              <button
+                                onClick={() => handleMakeLeader(member.studentId)}
+                                className="text-xs bg-blue-500 text-white px-2 py-1 rounded font-bold hover:bg-blue-600"
+                              >
+                                Make Leader
+                              </button>
+                            )}
                             <button
-                              onClick={() => handleMakeLeader(member.id)}
-                              className="text-xs bg-blue-500 text-white px-2 py-1 rounded font-bold hover:bg-blue-600"
+                              onClick={() => handleRemoveMember(member.studentId)}
+                              className="text-xs bg-red-500 text-white px-2 py-1 rounded font-bold hover:bg-red-600"
                             >
-                              Make Leader
+                              <UserMinus className="w-3 h-3" />
                             </button>
-                          )}
-                          <button
-                            onClick={() => handleRemoveMember(member.id)}
-                            className="text-xs bg-red-500 text-white px-2 py-1 rounded font-bold hover:bg-red-600"
-                          >
-                            <UserMinus className="w-3 h-3" />
-                          </button>
+                          </div>
                         </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
@@ -429,7 +425,7 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
                           </div>
                           <button
                             onClick={() => handleAddMember(student)}
-                            disabled={currentMembers.length >= 4}
+                            disabled={formData.members.length >= 4}
                             className="bg-green-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
                           >
                             <UserPlus className="w-3 h-3" />
@@ -442,7 +438,7 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
                     <div className="text-center py-4 text-gray-500">
                       <p className="text-sm font-semibold">
                         {searchTerm ? 'No students match your search' : 
-                         currentMembers.length >= 4 ? 'Group is full (4/4 members)' :
+                         formData.members.length >= 4 ? 'Group is full (4/4 members)' :
                          'No available students'}
                       </p>
                       {searchTerm && (
@@ -461,7 +457,7 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
         {/* Footer */}
         <div className="bg-gray-50 p-6 border-t-2 border-gray-300 flex justify-between items-center">
           <div className="text-sm text-gray-600">
-            <p className="font-semibold">Group: {group?.groupId} | Members: {currentMembers.length}/4</p>
+            <p className="font-semibold">Group: {group?.groupId} | Members: {formData.members.length}/4</p>
           </div>
           <div className="flex space-x-3">
             <button
@@ -472,7 +468,7 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
             </button>
             <button
               onClick={handleSave}
-              disabled={saveLoading || !formData.title.trim() || !formData.description.trim() || currentMembers.length === 0}
+              disabled={saveLoading || !formData.title.trim() || !formData.description.trim() || formData.members.length === 0}
               className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
             >
               <Save className="w-4 h-4" />
