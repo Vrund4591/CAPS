@@ -180,10 +180,12 @@ model Notification {
 
 // For storing authorized emails/users who can sign up
 model AuthorizedUser {
-  id    String @id @default(cuid())
-  email String @unique
-  role  Role
-  isUsed Boolean @default(false) // To track if this email has been used for signup
+  id        String   @id @default(cuid())
+  email     String   @unique
+  role      Role
+  isUsed    Boolean  @default(false) // To track if this email has been used for signup
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   @@map("authorized_users")
 }

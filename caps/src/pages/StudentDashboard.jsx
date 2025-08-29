@@ -238,7 +238,7 @@ const StudentDashboard = ({ user, onLogout }) => {
                 {!myGroup && (
                   <Link
                     to="/create-group"
-                    className="block bg-green-100 hover:bg-green-200 p-4 rounded-2xl border-3 border-green-500 font-bold text-green-800 text-center transition-colors duration-200 flex items-center justify-center gap-2"
+                    className="block bg-green-100 hover:bg-green-200 p-4 rounded-2xl border-3 border-green-500 font-bold text-green-800 text-center transition-colors duration-200 items-center justify-center gap-2"
                   >
                     <Plus className="w-5 h-5" />
                     Create Group
@@ -247,7 +247,7 @@ const StudentDashboard = ({ user, onLogout }) => {
                 {myGroup && (
                   <Link
                     to="/my-group"
-                    className="block bg-blue-100 hover:bg-blue-200 p-4 rounded-2xl border-3 border-blue-500 font-bold text-blue-800 text-center transition-colors duration-200 flex items-center justify-center gap-2"
+                    className="block bg-blue-100 hover:bg-blue-200 p-4 rounded-2xl border-3 border-blue-500 font-bold text-blue-800 text-center transition-colors duration-200 items-center justify-center gap-2"
                   >
                     <Users className="w-5 h-5" />
                     My Group

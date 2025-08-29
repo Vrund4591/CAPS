@@ -527,7 +527,7 @@ const AdminDashboard = ({ user, onLogout }) => {
             <div className="flex justify-between items-center mb-6">
               <h2 className="text-2xl font-black text-gray-900 flex items-center gap-2">
                 <Users className="w-6 h-6 text-blue-500" />
-                Authorized Users Management
+                User Authorization Management
               </h2>
               <button
                 onClick={() => setShowUserModal(true)}
@@ -564,38 +564,93 @@ const AdminDashboard = ({ user, onLogout }) => {
               </div>
             </div>
 
+            {/* Summary Cards */}
+            <div className="grid md:grid-cols-3 gap-4 mb-6">
+              <div className="bg-blue-50 p-4 rounded-2xl border-2 border-blue-300">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-2xl font-black text-blue-800">
+                      {filteredAuthorizedUsers.filter(u => !u.isUsed).length}
+                    </div>
+                    <div className="text-blue-700 font-bold text-sm">Pending Registrations</div>
+                  </div>
+                  <Clock className="w-8 h-8 text-blue-600" />
+                </div>
+              </div>
+              
+              <div className="bg-green-50 p-4 rounded-2xl border-2 border-green-300">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-2xl font-black text-green-800">
+                      {filteredAuthorizedUsers.filter(u => u.isUsed).length}
+                    </div>
+                    <div className="text-green-700 font-bold text-sm">Completed Registrations</div>
+                  </div>
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                </div>
+              </div>
+              
+              <div className="bg-purple-50 p-4 rounded-2xl border-2 border-purple-300">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <div className="text-2xl font-black text-purple-800">{filteredAuthorizedUsers.length}</div>
+                    <div className="text-purple-700 font-bold text-sm">Total Authorizations</div>
+                  </div>
+                  <Shield className="w-8 h-8 text-purple-600" />
+                </div>
+              </div>
+            </div>
+
             {/* Authorized Users List */}
             <div className="space-y-4">
               {filteredAuthorizedUsers.length > 0 ? (
                 filteredAuthorizedUsers.map((authUser) => (
                   <div key={authUser.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border-2 border-gray-300 hover:border-blue-300 transition-colors">
                     <div>
-                      <h3 className="font-bold text-gray-900">{authUser.email}</h3>
+                      <div className="flex items-center gap-3">
+                        <h3 className="font-bold text-gray-900">{authUser.email}</h3>
+                        <span className={`px-3 py-1 rounded-full text-xs font-bold border-2 ${getRoleColor(authUser.role)}`}>
+                          {authUser.role}
+                        </span>
+                        <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                          authUser.isUsed 
+                            ? 'bg-green-100 text-green-800' 
+                            : 'bg-yellow-100 text-yellow-800'
+                        }`}>
+                          {authUser.isUsed ? 'Registered' : 'Pending'}
+                        </span>
+                      </div>
                       <p className="text-sm text-gray-600">
                         Authorized on {new Date(authUser.createdAt).toLocaleDateString()}
+                        {authUser.isUsed && (
+                          <span className="ml-2 text-green-600">• Registration completed</span>
+                        )}
                       </p>
                     </div>
                     <div className="flex items-center space-x-3">
-                      <span className={`px-3 py-1 rounded-full text-xs font-bold border-2 ${getRoleColor(authUser.role)}`}>
-                        {authUser.role}
-                      </span>
-                      <button
-                        onClick={() => handleRemoveAuthorizedUser(authUser.id)}
-                        className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-xl transition-colors"
-                        title="Remove authorization"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {!authUser.isUsed && (
+                        <button
+                          onClick={() => handleRemoveAuthorizedUser(authUser.id)}
+                          className="bg-red-500 hover:bg-red-600 text-white p-2 rounded-xl transition-colors"
+                          title="Remove authorization"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </div>
                 ))
               ) : (
                 <div className="text-center py-12">
                   <Mail className="w-16 h-16 text-gray-400 mx-auto mb-4" />
-                  <h3 className="text-xl font-bold text-gray-700 mb-2">User Authorization Coming Soon</h3>
+                  <h3 className="text-xl font-bold text-gray-700 mb-2">
+                    {searchTerm || filterRole !== 'ALL' ? 'No matching authorizations' : 'No authorized users yet'}
+                  </h3>
                   <p className="text-gray-600">
-                    The user pre-authorization system will be available in a future update.
-                    Currently, users can register directly if they have valid college email addresses.
+                    {searchTerm || filterRole !== 'ALL' 
+                      ? 'Try adjusting your search or filter criteria'
+                      : 'Start by authorizing users in the Quick Authorize section below'
+                    }
                   </p>
                 </div>
               )}

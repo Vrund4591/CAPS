@@ -40,17 +40,45 @@ router.get('/students', authenticateToken, authorizeRoles('ADMIN'), async (req, 
   }
 });
 
-// Add authorized user (Admin only) - Mock implementation
+// Add authorized user (Admin only)
 router.post('/authorize', authenticateToken, authorizeRoles('ADMIN'), async (req, res) => {
   try {
     const { email, role } = req.body;
 
-    // Mock response since authorizedUser table doesn't exist
-    // In a real implementation, you would create this table and store the data
+    if (!email || !role) {
+      return res.status(400).json({ message: 'Email and role are required' });
+    }
+
+    if (!['STUDENT', 'FACULTY', 'ADMIN'].includes(role)) {
+      return res.status(400).json({ message: 'Invalid role' });
+    }
+
+    // Check if already authorized
+    const existingAuth = await prisma.authorizedUser.findFirst({
+      where: { email, role }
+    });
+
+    if (existingAuth) {
+      return res.status(400).json({ 
+        message: `User ${email} is already authorized as ${role}` 
+      });
+    }
+
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({ where: { email } });
+    if (existingUser) {
+      return res.status(400).json({ 
+        message: 'User with this email already exists in the system' 
+      });
+    }
+
+    const authorizedUser = await prisma.authorizedUser.create({
+      data: { email, role }
+    });
+
     res.status(201).json({
-      message: 'User authorization functionality coming soon',
-      email,
-      role
+      message: `User ${email} has been authorized to register as ${role}`,
+      authorizedUser
     });
   } catch (error) {
     console.error('Authorize user error:', error);
@@ -163,25 +191,107 @@ router.get('/analytics/overview', authenticateToken, authorizeRoles('ADMIN'), as
   }
 });
 
-// Get authorized users list (Admin only) - Mock implementation since table doesn't exist
+// Get authorized users list (Admin only)
 router.get('/authorized', authenticateToken, authorizeRoles('ADMIN'), async (req, res) => {
   try {
-    // Since authorizedUser table doesn't exist, return empty array
-    // In a real implementation, you would create this table in the schema
-    res.json({ authorizedUsers: [] });
+    const authorizedUsers = await prisma.authorizedUser.findMany({
+      orderBy: { createdAt: 'desc' }
+    });
+
+    res.json({ authorizedUsers });
   } catch (error) {
     console.error('Get authorized users error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });
 
-// Remove authorized user (Admin only) - Mock implementation
+// Remove authorized user (Admin only)
 router.delete('/authorized/:id', authenticateToken, authorizeRoles('ADMIN'), async (req, res) => {
   try {
-    // Mock response since authorizedUser table doesn't exist
-    res.json({ message: 'User authorization removal functionality coming soon' });
+    const { id } = req.params;
+
+    const authorizedUser = await prisma.authorizedUser.findUnique({
+      where: { id }
+    });
+
+    if (!authorizedUser) {
+      return res.status(404).json({ message: 'Authorized user not found' });
+    }
+
+    if (authorizedUser.isUsed) {
+      return res.status(400).json({ 
+        message: 'Cannot remove authorization for a user who has already registered' 
+      });
+    }
+
+    await prisma.authorizedUser.delete({
+      where: { id }
+    });
+
+    res.json({ message: 'User authorization removed successfully' });
   } catch (error) {
     console.error('Remove authorized user error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Bulk authorize users (Admin only)
+router.post('/bulk-authorize', authenticateToken, authorizeRoles('ADMIN'), async (req, res) => {
+  try {
+    const { emails, role } = req.body;
+
+    if (!emails || !Array.isArray(emails) || emails.length === 0) {
+      return res.status(400).json({ message: 'Emails array is required' });
+    }
+
+    if (!['STUDENT', 'FACULTY', 'ADMIN'].includes(role)) {
+      return res.status(400).json({ message: 'Invalid role' });
+    }
+
+    const results = {
+      authorized: [],
+      skipped: [],
+      errors: []
+    };
+
+    for (const email of emails) {
+      try {
+        // Check if already authorized
+        const existingAuth = await prisma.authorizedUser.findFirst({
+          where: { email: email.trim(), role }
+        });
+
+        if (existingAuth) {
+          results.skipped.push({ email, reason: 'Already authorized' });
+          continue;
+        }
+
+        // Check if user already exists
+        const existingUser = await prisma.user.findUnique({ 
+          where: { email: email.trim() } 
+        });
+
+        if (existingUser) {
+          results.skipped.push({ email, reason: 'User already exists' });
+          continue;
+        }
+
+        await prisma.authorizedUser.create({
+          data: { email: email.trim(), role }
+        });
+
+        results.authorized.push(email);
+      } catch (error) {
+        results.errors.push({ email, error: error.message });
+      }
+    }
+
+    res.json({
+      message: `Bulk authorization completed`,
+      results
+    });
+  } catch (error) {
+    console.error('Bulk authorize error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

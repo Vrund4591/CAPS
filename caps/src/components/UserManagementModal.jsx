@@ -36,6 +36,9 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
   const [editingUser, setEditingUser] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [bulkAction, setBulkAction] = useState('');
+  const [showBulkAuthorizeModal, setShowBulkAuthorizeModal] = useState(false);
+  const [bulkEmails, setBulkEmails] = useState('');
+  const [bulkRole, setBulkRole] = useState('STUDENT');
 
   useEffect(() => {
     if (isOpen) {
@@ -146,6 +149,51 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
       } else {
         const data = await response.json();
         alert(data.message || 'Bulk action failed');
+      }
+    } catch (error) {
+      alert('Network error. Please try again.');
+    }
+  };
+
+  const handleBulkAuthorize = async () => {
+    if (!bulkEmails.trim()) {
+      alert('Please enter email addresses');
+      return;
+    }
+
+    const emails = bulkEmails
+      .split('\n')
+      .map(email => email.trim())
+      .filter(email => email && email.includes('@'));
+
+    if (emails.length === 0) {
+      alert('Please enter valid email addresses');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5001/api/users/bulk-authorize', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          emails,
+          role: bulkRole
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        alert(`Bulk authorization completed!\nAuthorized: ${data.results.authorized.length}\nSkipped: ${data.results.skipped.length}\nErrors: ${data.results.errors.length}`);
+        setBulkEmails('');
+        setShowBulkAuthorizeModal(false);
+        onUserUpdated();
+      } else {
+        const data = await response.json();
+        alert(data.message || 'Bulk authorization failed');
       }
     } catch (error) {
       alert('Network error. Please try again.');
@@ -433,9 +481,62 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
           )}
         </div>
       </div>
+
+      {/* Bulk Authorization Modal */}
+      {showBulkAuthorizeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60">
+          <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black max-w-md w-full mx-4">
+            <h3 className="text-xl font-black text-gray-900 mb-4">Bulk Authorize Users</h3>
+            
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Email Addresses (one per line)
+                </label>
+                <textarea
+                  value={bulkEmails}
+                  onChange={(e) => setBulkEmails(e.target.value)}
+                  placeholder="user1@college.edu&#10;user2@college.edu&#10;user3@college.edu"
+                  rows="6"
+                  className="w-full p-3 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Role
+                </label>
+                <select
+                  value={bulkRole}
+                  onChange={(e) => setBulkRole(e.target.value)}
+                  className="w-full p-3 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
+                >
+                  <option value="STUDENT">Student</option>
+                  <option value="FACULTY">Faculty</option>
+                  <option value="ADMIN">Admin</option>
+                </select>
+              </div>
+            </div>
+            
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => setShowBulkAuthorizeModal(false)}
+                className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkAuthorize}
+                className="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-xl"
+              >
+                Authorize
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
 
 export default UserManagementModal;
-            

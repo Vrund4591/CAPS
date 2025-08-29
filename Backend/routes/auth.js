@@ -22,7 +22,10 @@ router.post('/register', async (req, res) => {
     });
 
     if (!authorizedUser) {
-      return res.status(403).json({ message: 'Not authorized to register with this email and role' });
+      return res.status(403).json({ 
+        message: 'Registration requires pre-authorization. Please contact your administrator to authorize your email address for registration.',
+        details: 'Your email must be pre-authorized by an administrator before you can create an account.'
+      });
     }
 
     // Check if user already exists
@@ -34,58 +37,63 @@ router.post('/register', async (req, res) => {
     // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user
-    const user = await prisma.user.create({
-      data: {
-        email,
-        password: hashedPassword,
-        name,
-        role
+    // Create user in transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create user
+      const user = await tx.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          name,
+          role
+        }
+      });
+
+      // Create role-specific record
+      if (role === 'STUDENT') {
+        await tx.student.create({
+          data: {
+            userId: user.id,
+            enrollmentNo: additionalData.enrollmentNo,
+            class: additionalData.class,
+            division: additionalData.division,
+            semester: parseInt(additionalData.semester),
+            phoneNumber: additionalData.phoneNumber
+          }
+        });
+      } else if (role === 'FACULTY') {
+        await tx.faculty.create({
+          data: {
+            userId: user.id,
+            department: additionalData.department
+          }
+        });
+      } else if (role === 'ADMIN') {
+        await tx.admin.create({
+          data: { userId: user.id }
+        });
       }
+
+      // Mark authorized user as used
+      await tx.authorizedUser.update({
+        where: { id: authorizedUser.id },
+        data: { isUsed: true }
+      });
+
+      return user;
     });
 
-    // Create role-specific record
-    if (role === 'STUDENT') {
-      await prisma.student.create({
-        data: {
-          userId: user.id,
-          enrollmentNo: additionalData.enrollmentNo,
-          class: additionalData.class,
-          division: additionalData.division,
-          semester: parseInt(additionalData.semester),
-          phoneNumber: additionalData.phoneNumber
-        }
-      });
-    } else if (role === 'FACULTY') {
-      await prisma.faculty.create({
-        data: {
-          userId: user.id,
-          department: additionalData.department
-        }
-      });
-    } else if (role === 'ADMIN') {
-      await prisma.admin.create({
-        data: { userId: user.id }
-      });
-    }
-
-    // Mark authorized user as used
-    await prisma.authorizedUser.update({
-      where: { id: authorizedUser.id },
-      data: { isUsed: true }
-    });
-
-    const token = generateToken(user.id);
+    const token = generateToken(result.id);
 
     res.status(201).json({
       message: 'User registered successfully',
       token,
-      user: { id: user.id, email: user.email, name: user.name, role: user.role }
+      user: { id: result.id, email: result.email, name: result.name, role: result.role }
     });
 
   } catch (error) {
     console.error('Registration error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Server error during registration' });
   }
 });
 
