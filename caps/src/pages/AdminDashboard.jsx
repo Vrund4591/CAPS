@@ -199,7 +199,7 @@ const AdminDashboard = ({ user, onLogout }) => {
   };
 
   const handleRemoveAuthorizedUser = async (id) => {
-    if (!confirm('Are you sure you want to remove this authorized user?')) return;
+    if (!window.confirm('Are you sure you want to remove this authorized user?')) return;
 
     try {
       const token = localStorage.getItem('token');

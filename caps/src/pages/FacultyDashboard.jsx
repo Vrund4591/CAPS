@@ -167,8 +167,16 @@ const FacultyDashboard = ({ user, onLogout }) => {
       const matchesSemester = semesterFilter === 'ALL' || 
         group.members?.some(member => member.student?.semester?.toString() === semesterFilter);
       
+      // Fix department filtering to check student class format
       const matchesDepartment = departmentFilter === 'ALL' || 
-        group.faculty?.department === departmentFilter;
+        group.faculty?.department === departmentFilter ||
+        group.members?.some(member => {
+          if (member.student?.class) {
+            const classParts = member.student.class.split('-');
+            return classParts.length > 1 && classParts[1] === departmentFilter;
+          }
+          return false;
+        });
       
       // Filter by academic year (based on creation date)
       const matchesAcademicYear = academicYearFilter === 'ALL' || (() => {
@@ -841,4 +849,3 @@ const FacultyDashboard = ({ user, onLogout }) => {
 };
 
 export default FacultyDashboard;
-              

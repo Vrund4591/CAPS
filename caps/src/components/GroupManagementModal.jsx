@@ -143,7 +143,17 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
             
             const matchesStatus = statusFilter === 'ALL' || group.status === statusFilter;
             const matchesProjectType = projectTypeFilter === 'ALL' || group.projectType === projectTypeFilter;
-            const matchesDepartment = departmentFilter === 'ALL' || group.faculty?.department === departmentFilter;
+            
+            // Fix department filtering - check both faculty department and student classes
+            const matchesDepartment = departmentFilter === 'ALL' || 
+              group.faculty?.department === departmentFilter ||
+              group.members?.some(member => {
+                if (member.student?.class) {
+                  const classParts = member.student.class.split('-');
+                  return classParts.length > 1 && classParts[1] === departmentFilter;
+                }
+                return false;
+              });
             
             const matchesSemester = semesterFilter === 'ALL' || 
               group.members?.some(member => member.student?.semester?.toString() === semesterFilter);
@@ -183,7 +193,7 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
   };
 
   const handleDeleteGroup = async (groupId) => {
-    if (!confirm('Are you sure you want to force delete this group? This action cannot be undone.')) return;
+    if (!window.confirm('Are you sure you want to force delete this group? This action cannot be undone.')) return;
 
     try {
       const token = localStorage.getItem('token');
@@ -198,9 +208,11 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
         onGroupUpdated();
       } else {
         const data = await response.json();
+        console.error('Delete group error:', data);
         toast.error('Delete Failed', data.message || 'Failed to delete group');
       }
     } catch (error) {
+      console.error('Network error:', error);
       toast.error('Network Error', 'Please check your connection and try again.');
     }
   };
@@ -674,4 +686,3 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
 };
 
 export default GroupManagementModal;
-                         

@@ -178,8 +178,17 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
       student.class.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.division.toLowerCase().includes(searchTerm.toLowerCase());
     
-    // Filter by class
-    const matchesClass = classFilter === 'ALL' || student.class === classFilter;
+    // Filter by class - extract department from class field for comparison
+    const matchesClass = classFilter === 'ALL' || (() => {
+      if (classFilter.includes('-')) {
+        // If filter includes hyphen, match exact class
+        return student.class === classFilter;
+      } else {
+        // If filter is just department, extract from student's class
+        const classParts = student.class?.split('-');
+        return classParts && classParts.length > 1 && classParts[1] === classFilter;
+      }
+    })();
     
     // Filter by semester
     const matchesSemester = semesterFilter === 'ALL' || student.semester?.toString() === semesterFilter;

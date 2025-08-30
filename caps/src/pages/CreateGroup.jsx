@@ -526,7 +526,9 @@ const CreateGroup = ({ user, onLogout }) => {
       student.user.name.toLowerCase().includes(searchLower) ||
       student.enrollmentNo.toLowerCase().includes(searchLower) ||
       student.class.toLowerCase().includes(searchLower) ||
-      student.division.toLowerCase().includes(searchLower)
+      student.division.toLowerCase().includes(searchLower) ||
+      // Also search by department extracted from class
+      (student.class && student.class.split('-')[1]?.toLowerCase().includes(searchLower))
     );
   }, [availableStudents, searchTerm]);
 
