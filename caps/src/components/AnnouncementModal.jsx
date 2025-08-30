@@ -8,6 +8,7 @@ import {
   Send,
   AlertCircle
 } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 
 const AnnouncementModal = ({ isOpen, onClose, groups, user }) => {
   const [selectedGroups, setSelectedGroups] = useState(new Set());
@@ -16,6 +17,7 @@ const AnnouncementModal = ({ isOpen, onClose, groups, user }) => {
   const [emailBody, setEmailBody] = useState('');
   const [loading, setLoading] = useState(false);
   const [previewEmails, setPreviewEmails] = useState([]);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (isOpen) {
@@ -90,12 +92,12 @@ const AnnouncementModal = ({ isOpen, onClose, groups, user }) => {
 
   const handleSendEmail = () => {
     if (previewEmails.length === 0) {
-      alert('Please select at least one group');
+      toast.warning('No Recipients', 'Please select at least one group');
       return;
     }
 
     if (!emailSubject.trim()) {
-      alert('Please enter an email subject');
+      toast.warning('Missing Subject', 'Please enter an email subject');
       return;
     }
 
@@ -115,6 +117,8 @@ const AnnouncementModal = ({ isOpen, onClose, groups, user }) => {
     
     // Open default email client
     window.location.href = mailtoLink;
+    
+    toast.success('Email Client Opened', `Announcement ready to send to ${previewEmails.length} students`);
     
     // Close modal after opening email client
     onClose();

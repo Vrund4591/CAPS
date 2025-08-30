@@ -17,6 +17,7 @@ import {
   Zap
 } from 'lucide-react';
 import Header from '../components/Header';
+import { useToast } from '../context/ToastContext';
 
 const MyGroup = ({ user, onLogout }) => {
   const [group, setGroup] = useState(null);
@@ -25,6 +26,7 @@ const MyGroup = ({ user, onLogout }) => {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchGroupData();
@@ -59,14 +61,15 @@ const MyGroup = ({ user, onLogout }) => {
       });
 
       if (response.ok) {
+        toast.success('Group Deleted', 'Your group has been successfully deleted');
         navigate('/student-dashboard');
       } else {
         const errorData = await response.json();
-        alert(errorData.message || 'Failed to delete group');
+        toast.error('Delete Failed', errorData.message || 'Failed to delete group');
       }
     } catch (error) {
       console.error('Delete group failed:', error);
-      alert('Network error. Please try again.');
+      toast.error('Network Error', 'Please check your connection and try again.');
     }
     setDeleteLoading(false);
   };

@@ -38,6 +38,7 @@ import Header from '../components/Header';
 import UserManagementModal from '../components/UserManagementModal';
 import GroupManagementModal from '../components/GroupManagementModal';
 import SystemAnalyticsModal from '../components/SystemAnalyticsModal';
+import { useToast } from '../context/ToastContext';
 
 const AdminDashboard = ({ user, onLogout }) => {
   const [stats, setStats] = useState({
@@ -65,12 +66,21 @@ const AdminDashboard = ({ user, onLogout }) => {
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('ALL');
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchDashboardData();
     fetchAnalytics();
     fetchAuthorizedUsers();
   }, []);
+
+  // Add separate useEffect for filter-dependent operations
+  useEffect(() => {
+    if (selectedTab === 'users') {
+      // Refetch authorized users when filters change in users tab
+      fetchAuthorizedUsers();
+    }
+  }, [searchTerm, filterRole, selectedTab]);
 
   const fetchDashboardData = async () => {
     try {
@@ -170,15 +180,19 @@ const AdminDashboard = ({ user, onLogout }) => {
 
       if (response.ok) {
         const data = await response.json();
-        setMessage(data.message || `User ${authorizeForm.email} will be authorized as ${authorizeForm.role} (functionality coming soon)`);
+        toast.success('User Authorized!', `${authorizeForm.email} has been authorized as ${authorizeForm.role}`);
+        setMessage(data.message || `User ${authorizeForm.email} will be authorized as ${authorizeForm.role}`);
         setAuthorizeForm({ email: '', role: 'STUDENT' });
         fetchAuthorizedUsers();
       } else {
         const data = await response.json();
+        toast.error('Authorization Failed', data.message || 'Failed to authorize user');
         setMessage(data.message || 'Failed to authorize user');
       }
     } catch (error) {
-      setMessage(`Error: ${error.message || 'Network error. Please try again.'}`);
+      const errorMessage = `Error: ${error.message || 'Network error. Please try again.'}`;
+      toast.error('Network Error', errorMessage);
+      setMessage(errorMessage);
     }
 
     setTimeout(() => setMessage(''), 5000);
@@ -195,12 +209,15 @@ const AdminDashboard = ({ user, onLogout }) => {
       });
 
       if (response.ok) {
+        toast.success('User Removed', 'Authorized user has been removed successfully');
         setMessage('Authorized user removed successfully');
         fetchAuthorizedUsers();
       } else {
+        toast.error('Removal Failed', 'Failed to remove authorized user');
         setMessage('Failed to remove authorized user');
       }
     } catch (error) {
+      toast.error('Network Error', 'Please check your connection and try again.');
       setMessage('Network error. Please try again.');
     }
 
@@ -482,6 +499,57 @@ const AdminDashboard = ({ user, onLogout }) => {
                     <option value="FACULTY">Faculty</option>
                     <option value="ADMIN">Admin</option>
                   </select>
+
+                  {/* Additional fields based on role */}
+                  {authorizeForm.role === 'STUDENT' && (
+                    <>
+                      <input
+                        type="text"
+                        name="class"
+                        value={authorizeForm.class || ''}
+                        onChange={handleInputChange}
+                        className="w-full p-3 border-3 border-gray-300 rounded-2xl focus:border-blue-500 focus:outline-none font-semibold"
+                        placeholder="Class (e.g., BE)"
+                      />
+                      
+                      <select
+                        name="semester"
+                        value={authorizeForm.semester || ''}
+                        onChange={handleInputChange}
+                        className="w-full p-3 border-3 border-gray-300 rounded-2xl focus:border-blue-500 focus:outline-none font-semibold"
+                      >
+                        <option value="">Select Semester</option>
+                        {[1,2,3,4,5,6,7,8].map(sem => (
+                          <option key={sem} value={sem}>Semester {sem}</option>
+                        ))}
+                      </select>
+
+                      <input
+                        type="text"
+                        name="division"
+                        value={authorizeForm.division || ''}
+                        onChange={handleInputChange}
+                        className="w-full p-3 border-3 border-gray-300 rounded-2xl focus:border-blue-500 focus:outline-none font-semibold"
+                        placeholder="Division (e.g., A)"
+                        maxLength="1"
+                      />
+                    </>
+                  )}
+
+                  {authorizeForm.role === 'FACULTY' && (
+                    <select
+                      name="department"
+                      value={authorizeForm.department || 'IT'}
+                      onChange={handleInputChange}
+                      className="w-full p-3 border-3 border-gray-300 rounded-2xl focus:border-blue-500 focus:outline-none font-semibold"
+                    >
+                      <option value="IT">Information Technology</option>
+                      <option value="CE">Computer Engineering</option>
+                      <option value="MECH">Mechanical Engineering</option>
+                      <option value="CIVIL">Civil Engineering</option>
+                      <option value="ENTC">Electronics & Telecommunication</option>
+                    </select>
+                  )}
 
                   <button
                     type="submit"

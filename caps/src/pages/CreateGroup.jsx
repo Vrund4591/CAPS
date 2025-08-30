@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
@@ -13,6 +14,7 @@ import {
   X // Added missing X import
 } from 'lucide-react';
 import Header from '../components/Header';
+import { useToast } from '../context/ToastContext';
 
 // Memoized Search Bar component to prevent unnecessary re-renders
 const SearchBar = React.memo(({ 
@@ -122,6 +124,8 @@ const StudentsGrid = React.memo(({
   originalGroup, 
   onToggle 
 }) => {
+  const isSelectionDisabled = formData.teamMemberIds.length >= 3; // Max 3 additional members
+
   return (
     <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4 min-h-[400px]">
       {students.map((student) => {
@@ -138,6 +142,7 @@ const StudentsGrid = React.memo(({
             isSelected={isSelected}
             wasPreviouslySelected={wasPreviouslySelected}
             onToggle={onToggle}
+            isSelectionDisabled={isSelectionDisabled}
           />
         );
       })}
@@ -152,24 +157,35 @@ const StudentCard = React.memo(({
   student, 
   isSelected, 
   wasPreviouslySelected, 
-  onToggle 
+  onToggle,
+  isSelectionDisabled // Add new prop
 }) => {
+  const handleClick = () => {
+    if (isSelectionDisabled && !isSelected) {
+      return; // Don't allow selection if disabled and not already selected
+    }
+    onToggle(student.id);
+  };
+
   return (
     <div
-      className={`p-4 rounded-2xl border-3 cursor-pointer transition-all duration-200 ${
+      className={`p-4 rounded-2xl border-3 transition-all duration-200 ${
         isSelected
           ? 'bg-green-200 border-green-600'
           : wasPreviouslySelected
           ? 'bg-yellow-100 border-yellow-500 hover:border-green-500'
-          : 'bg-white border-gray-300 hover:border-green-500'
+          : isSelectionDisabled
+          ? 'bg-gray-100 border-gray-300 opacity-50 cursor-not-allowed'
+          : 'bg-white border-gray-300 hover:border-green-500 cursor-pointer'
       }`}
-      onClick={() => onToggle(student.id)}
+      onClick={handleClick}
     >
       <div className="flex items-center">
         <input
           type="checkbox"
           checked={isSelected}
-          onChange={() => onToggle(student.id)}
+          onChange={handleClick}
+          disabled={isSelectionDisabled && !isSelected}
           className="mr-3 w-5 h-5"
         />
         <div className="flex-1">
@@ -190,6 +206,11 @@ const StudentCard = React.memo(({
           <p className="text-sm text-gray-600">{student.class} - {student.division}</p>
         </div>
       </div>
+      {isSelectionDisabled && !isSelected && (
+        <div className="mt-2 text-xs text-red-600 font-bold">
+          Maximum team size reached (3/3 additional members)
+        </div>
+      )}
     </div>
   );
 });
@@ -268,6 +289,7 @@ const CreateGroup = ({ user, onLogout }) => {
   const [studentsPerPage] = useState(9); // 3x3 grid per page
   
   const navigate = useNavigate();
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchData();
@@ -388,7 +410,11 @@ const CreateGroup = ({ user, onLogout }) => {
       });
       if (studentsResponse.ok) {
         const studentsData = await studentsResponse.json();
-        setAvailableStudents(studentsData.students.filter(student => student.id !== user.profile.id));
+        // Enhanced filtering - exclude current user and add more student info
+        const filteredStudents = studentsData.students.filter(student => 
+          student.id !== user.profile.id
+        );
+        setAvailableStudents(filteredStudents);
       }
 
     } catch (error) {
@@ -445,7 +471,7 @@ const CreateGroup = ({ user, onLogout }) => {
     setSuccess('');
 
     if (formData.teamMemberIds.length > 3) {
-      setError('Maximum 4 members allowed (including you as team leader)');
+      toast.error('Team Size Limit', 'Maximum 4 members allowed (including you as team leader)');
       setLoading(false);
       return;
     }
@@ -473,15 +499,18 @@ const CreateGroup = ({ user, onLogout }) => {
       const data = await response.json();
 
       if (response.ok) {
-        setSuccess(isEditing ? 'Group recreated successfully! Redirecting to dashboard...' : 'Group created successfully! Redirecting to dashboard...');
+        toast.success(
+          isEditing ? 'Group Recreated!' : 'Group Created!', 
+          'Your group has been submitted for faculty approval.'
+        );
         setTimeout(() => {
           navigate('/student-dashboard');
         }, 2000);
       } else {
-        setError(data.message || 'Failed to create group');
+        toast.error('Creation Failed', data.message || 'Failed to create group');
       }
     } catch (error) {
-      setError(`Network error: ${error.message}. Please try again.`);
+      toast.error('Network Error', 'Please check your connection and try again.');
     }
 
     setLoading(false);
@@ -686,13 +715,12 @@ const CreateGroup = ({ user, onLogout }) => {
                 
                 {availableStudents.length > 0 ? (
                   <>
-                    {/* Optimized Search Bar */}
+                    {/* Enhanced Search Bar with Filters */}
                     <SearchBar
                       searchTerm={searchTerm}
                       onSearchChange={handleSearchChange}
                       onClearSearch={clearSearch}
                     />
-
                     {/* Optimized Search Results Info */}
                     <SearchResultsInfo
                       searchTerm={searchTerm}

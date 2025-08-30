@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { Home, Plus, Users, LogOut, Menu, User } from 'lucide-react';
+import NotificationDropdown from './NotificationDropdown';
 
 const Header = ({ user, onLogout, hasGroup = false }) => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
@@ -51,9 +52,9 @@ const Header = ({ user, onLogout, hasGroup = false }) => {
   };
 
   return (
-    <header className="bg-white shadow-2xl border-b-4 border-black sticky top-0 z-50">
+    <header className="bg-white border-b-4 border-black shadow-lg">
       <div className="container mx-auto px-6 py-4">
-        <div className="flex items-center justify-between">
+        <div className="flex justify-between items-center">
           {/* Logo */}
           <Link to="/" className="flex items-center space-x-">
             <img
@@ -94,6 +95,9 @@ const Header = ({ user, onLogout, hasGroup = false }) => {
 
           {/* Profile Icon */}
           <div className="flex items-center space-x-4">
+            {/* Add notification dropdown before user menu */}
+            <NotificationDropdown />
+
             <div className="relative" ref={profileRef}>
               <button
                 onClick={() => setIsProfileOpen(!isProfileOpen)}

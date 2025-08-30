@@ -27,10 +27,10 @@ import {
 import Header from '../components/Header';
 import AnnouncementModal from '../components/AnnouncementModal';
 import GroupEditModal from '../components/GroupEditModal';
+import { useToast } from '../context/ToastContext';
 
 const FacultyDashboard = ({ user, onLogout }) => {
   const [groups, setGroups] = useState([]);
-  const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [rejectionModal, setRejectionModal] = useState({ open: false, groupId: null });
   const [rejectionReason, setRejectionReason] = useState('');
@@ -38,6 +38,9 @@ const FacultyDashboard = ({ user, onLogout }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [projectTypeFilter, setProjectTypeFilter] = useState('ALL');
+  const [semesterFilter, setSemesterFilter] = useState('ALL');
+  const [departmentFilter, setDepartmentFilter] = useState('ALL');
+  const [academicYearFilter, setAcademicYearFilter] = useState('ALL');
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState('desc');
   const [viewMode, setViewMode] = useState('cards'); // 'cards' or 'table'
@@ -46,6 +49,7 @@ const FacultyDashboard = ({ user, onLogout }) => {
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchDashboardData();
@@ -72,23 +76,6 @@ const FacultyDashboard = ({ user, onLogout }) => {
         setGroups([]);
       }
 
-      // Fetch notifications
-      try {
-        const notificationResponse = await fetch('http://localhost:5001/api/notifications', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (notificationResponse.ok) {
-          const notificationData = await notificationResponse.json();
-          setNotifications(notificationData.notifications?.slice(0, 10) || []);
-        } else {
-          console.error('Error fetching notifications:', notificationResponse.status);
-          setNotifications([]);
-        }
-      } catch (error) {
-        console.error('Notifications fetch error:', error);
-        setNotifications([]);
-      }
-
     } catch (error) {
       console.error('Dashboard data fetch failed:', error);
     }
@@ -112,6 +99,11 @@ const FacultyDashboard = ({ user, onLogout }) => {
       });
 
       if (response.ok) {
+        if (status === 'APPROVED') {
+          toast.success('Group Approved!', 'The group has been successfully approved and students have been notified.');
+        } else if (status === 'REJECTED') {
+          toast.success('Group Rejected', 'The rejection feedback has been sent to the team leader.');
+        }
         fetchDashboardData(); // Refresh data
         if (status === 'REJECTED') {
           setRejectionModal({ open: false, groupId: null });
@@ -119,11 +111,11 @@ const FacultyDashboard = ({ user, onLogout }) => {
         }
       } else {
         const errorData = await response.json();
-        alert(errorData.message || 'Failed to update group status');
+        toast.error('Action Failed', errorData.message || 'Failed to update group status');
       }
     } catch (error) {
       console.error('Group action failed:', error);
-      alert('Network error. Please try again.');
+      toast.error('Network Error', 'Please check your connection and try again.');
     }
     setActionLoading(false);
   };
@@ -135,7 +127,7 @@ const FacultyDashboard = ({ user, onLogout }) => {
 
   const confirmReject = () => {
     if (!rejectionReason.trim()) {
-      alert('Please provide a reason for rejection');
+      toast.warning('Missing Information', 'Please provide a reason for rejection');
       return;
     }
     handleGroupAction(rejectionModal.groupId, 'REJECTED', rejectionReason);
@@ -166,12 +158,35 @@ const FacultyDashboard = ({ user, onLogout }) => {
       const matchesSearch = searchTerm === '' || 
         group.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
         group.groupId.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        group.teamLeader.user.name.toLowerCase().includes(searchTerm.toLowerCase());
+        group.teamLeader?.user?.name.toLowerCase().includes(searchTerm.toLowerCase());
       
       const matchesStatus = statusFilter === 'ALL' || group.status === statusFilter;
       const matchesProjectType = projectTypeFilter === 'ALL' || group.projectType === projectTypeFilter;
       
-      return matchesSearch && matchesStatus && matchesProjectType;
+      // Filter by student data from group members
+      const matchesSemester = semesterFilter === 'ALL' || 
+        group.members?.some(member => member.student?.semester?.toString() === semesterFilter);
+      
+      const matchesDepartment = departmentFilter === 'ALL' || 
+        group.faculty?.department === departmentFilter;
+      
+      // Filter by academic year (based on creation date)
+      const matchesAcademicYear = academicYearFilter === 'ALL' || (() => {
+        const createdYear = new Date(group.createdAt).getFullYear();
+        const currentMonth = new Date().getMonth();
+        let academicStartYear = createdYear;
+        
+        // If before April (month 3), consider previous academic year
+        if (currentMonth < 3) {
+          academicStartYear = createdYear - 1;
+        }
+        
+        const academicYearString = `${academicStartYear}-${(academicStartYear + 1).toString().slice(-2)}`;
+        return academicYearString === academicYearFilter;
+      })();
+      
+      return matchesSearch && matchesStatus && matchesProjectType && matchesSemester && 
+             matchesDepartment && matchesAcademicYear;
     })
     .sort((a, b) => {
       let aValue = a[sortBy];
@@ -303,7 +318,7 @@ const FacultyDashboard = ({ user, onLogout }) => {
 
               {/* Filters and Search */}
               <div className="bg-gray-50 p-4 rounded-2xl border-2 border-gray-300 mb-6">
-                <div className="grid md:grid-cols-4 gap-4">
+                <div className="grid md:grid-cols-4 gap-4 mb-4">
                   <div className="relative">
                     <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
                     <input
@@ -350,6 +365,89 @@ const FacultyDashboard = ({ user, onLogout }) => {
                     <option value="title-asc">Title A-Z</option>
                     <option value="title-desc">Title Z-A</option>
                   </select>
+                </div>
+
+                {/* Additional Filter Row */}
+                <div className="grid md:grid-cols-3 gap-4">
+                  <select
+                    value={semesterFilter}
+                    onChange={(e) => setSemesterFilter(e.target.value)}
+                    className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none font-semibold"
+                  >
+                    <option value="ALL">All Semesters</option>
+                    {[1,2,3,4,5,6,7,8].map(sem => (
+                      <option key={sem} value={sem}>Semester {sem}</option>
+                    ))}
+                  </select>
+
+                  <select
+                    value={departmentFilter}
+                    onChange={(e) => setDepartmentFilter(e.target.value)}
+                    className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none font-semibold"
+                  >
+                    <option value="ALL">All Departments</option>
+                    <option value="IT">Information Technology</option>
+                    <option value="CE">Computer Engineering</option>
+                    <option value="MECH">Mechanical Engineering</option>
+                    <option value="CIVIL">Civil Engineering</option>
+                    <option value="ENTC">Electronics & Telecommunication</option>
+                  </select>
+
+                  <select
+                    value={academicYearFilter}
+                    onChange={(e) => setAcademicYearFilter(e.target.value)}
+                    className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none font-semibold"
+                  >
+                    <option value="ALL">All Academic Years</option>
+                    <option value="2024-25">2024-25</option>
+                    <option value="2023-24">2023-24</option>
+                    <option value="2022-23">2022-23</option>
+                    <option value="2021-22">2021-22</option>
+                  </select>
+                </div>
+
+                {/* Filter Summary */}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {statusFilter !== 'ALL' && (
+                    <span className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-xs font-bold">
+                      Status: {statusFilter}
+                    </span>
+                  )}
+                  {projectTypeFilter !== 'ALL' && (
+                    <span className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-xs font-bold">
+                      Type: {projectTypeFilter}
+                    </span>
+                  )}
+                  {semesterFilter !== 'ALL' && (
+                    <span className="bg-purple-100 text-purple-800 px-3 py-1 rounded-full text-xs font-bold">
+                      Semester: {semesterFilter}
+                    </span>
+                  )}
+                  {departmentFilter !== 'ALL' && (
+                    <span className="bg-indigo-100 text-indigo-800 px-3 py-1 rounded-full text-xs font-bold">
+                      Dept: {departmentFilter}
+                    </span>
+                  )}
+                  {academicYearFilter !== 'ALL' && (
+                    <span className="bg-red-100 text-red-800 px-3 py-1 rounded-full text-xs font-bold">
+                      Year: {academicYearFilter}
+                    </span>
+                  )}
+                  {(statusFilter !== 'ALL' || projectTypeFilter !== 'ALL' || semesterFilter !== 'ALL' || 
+                    departmentFilter !== 'ALL' || academicYearFilter !== 'ALL') && (
+                    <button
+                      onClick={() => {
+                        setStatusFilter('ALL');
+                        setProjectTypeFilter('ALL');
+                        setSemesterFilter('ALL');
+                        setDepartmentFilter('ALL');
+                        setAcademicYearFilter('ALL');
+                      }}
+                      className="bg-gray-200 text-gray-700 px-3 py-1 rounded-full text-xs font-bold hover:bg-gray-300"
+                    >
+                      Clear All Filters
+                    </button>
+                  )}
                 </div>
               </div>
 
@@ -574,42 +672,6 @@ const FacultyDashboard = ({ user, onLogout }) => {
                 </button>
               </div>
             </div>
-
-            {/* Recent Notifications */}
-            <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black">
-              <h3 className="text-xl font-black text-gray-900 mb-4 flex items-center gap-2">
-                <Bell className="w-5 h-5 text-blue-500" />
-                Recent Activity
-              </h3>
-              <div className="space-y-3 max-h-80 overflow-y-auto">
-                {notifications.length > 0 ? (
-                  notifications.map((notification) => (
-                    <div
-                      key={notification.id}
-                      className={`p-3 rounded-2xl border-2 ${
-                        notification.isRead ? 'bg-gray-300 border-gray-300' : 'bg-blue-50 border-blue-500'
-                      }`}
-                    >
-                      <h4 className="font-bold text-sm text-gray-900">{notification.title}</h4>
-                      <p className="text-xs text-gray-600 mt-1 line-clamp-2">{notification.message}</p>
-                      <div className="flex justify-between items-center mt-2">
-                        <p className="text-xs text-gray-500">
-                          {new Date(notification.sentAt).toLocaleDateString()}
-                        </p>
-                        {!notification.isRead && (
-                          <span className="w-2 h-2 bg-blue-500 rounded-full"></span>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-4 text-gray-500">
-                    <Mail className="w-8 h-8 mx-auto mb-2" />
-                    <p className="text-sm font-semibold">No recent activity</p>
-                  </div>
-                )}
-              </div>
-            </div>
           </div>
         </div>
       </div>
@@ -655,7 +717,7 @@ const FacultyDashboard = ({ user, onLogout }) => {
                 <div className="space-y-3">
                   {selectedGroup.members.map((member) => (
                     <div key={member.id} className={`p-3 rounded-2xl border-2 ${
-                      member.isLeader ? 'bg-blue-50 border-blue-500' : 'bg-gray-50 border-gray-300'
+                      member.isLeader ? 'bg-blue-500 border-blue-600' : 'bg-gray-50 border-gray-300'
                     }`}>
                       <div className="flex items-center justify-between">
                         <div>
@@ -779,3 +841,4 @@ const FacultyDashboard = ({ user, onLogout }) => {
 };
 
 export default FacultyDashboard;
+              

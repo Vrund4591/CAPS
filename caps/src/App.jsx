@@ -7,6 +7,8 @@ import AdminDashboard from './pages/AdminDashboard';
 import CreateGroup from './pages/CreateGroup';
 import MyGroup from './pages/MyGroup';
 import './App.css';
+import { ToastProvider } from './context/ToastContext';
+import { NotificationProvider } from './context/NotificationContext';
 
 function App() {
   const [user, setUser] = useState(null);
@@ -66,75 +68,79 @@ function App() {
 
   return (
     <Router>
-      <div className="min-h-screen" style={{backgroundColor: '#FFFFF4'}}>
-        <Routes>
-          <Route 
-            path="/" 
-            element={
-              user ? (
-                <Navigate to={`/${user.role.toLowerCase()}-dashboard`} replace />
-              ) : (
-                <LandingPage onLogin={handleLogin} />
-              )
-            } 
-          />
-          
-          <Route 
-            path="/student-dashboard" 
-            element={
-              user && user.role === 'STUDENT' ? (
-                <StudentDashboard user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/" replace />
-              )
-            } 
-          />
-          
-          <Route 
-            path="/faculty-dashboard" 
-            element={
-              user && user.role === 'FACULTY' ? (
-                <FacultyDashboard user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/" replace />
-              )
-            } 
-          />
-          
-          <Route 
-            path="/admin-dashboard" 
-            element={
-              user && user.role === 'ADMIN' ? (
-                <AdminDashboard user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/" replace />
-              )
-            } 
-          />
+      <ToastProvider>
+        <NotificationProvider>
+          <div className="min-h-screen" style={{backgroundColor: '#FFFFF4'}}>
+            <Routes>
+              <Route 
+                path="/" 
+                element={
+                  user ? (
+                    <Navigate to={`/${user.role.toLowerCase()}-dashboard`} replace />
+                  ) : (
+                    <LandingPage onLogin={handleLogin} />
+                  )
+                } 
+              />
+              
+              <Route 
+                path="/student-dashboard" 
+                element={
+                  user && user.role === 'STUDENT' ? (
+                    <StudentDashboard user={user} onLogout={handleLogout} />
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                } 
+              />
+              
+              <Route 
+                path="/faculty-dashboard" 
+                element={
+                  user && user.role === 'FACULTY' ? (
+                    <FacultyDashboard user={user} onLogout={handleLogout} />
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                } 
+              />
+              
+              <Route 
+                path="/admin-dashboard" 
+                element={
+                  user && user.role === 'ADMIN' ? (
+                    <AdminDashboard user={user} onLogout={handleLogout} />
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                } 
+              />
 
-          <Route 
-            path="/create-group" 
-            element={
-              user && user.role === 'STUDENT' ? (
-                <CreateGroup user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/" replace />
-              )
-            } 
-          />
+              <Route 
+                path="/create-group" 
+                element={
+                  user && user.role === 'STUDENT' ? (
+                    <CreateGroup user={user} onLogout={handleLogout} />
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                } 
+              />
 
-          <Route 
-            path="/my-group" 
-            element={
-              user && user.role === 'STUDENT' ? (
-                <MyGroup user={user} onLogout={handleLogout} />
-              ) : (
-                <Navigate to="/" replace />
-              )
-            } 
-          />
-        </Routes>
-      </div>
+              <Route 
+                path="/my-group" 
+                element={
+                  user && user.role === 'STUDENT' ? (
+                    <MyGroup user={user} onLogout={handleLogout} />
+                  ) : (
+                    <Navigate to="/" replace />
+                  )
+                } 
+              />
+            </Routes>
+          </div>
+        </NotificationProvider>
+      </ToastProvider>
     </Router>
   );
 }

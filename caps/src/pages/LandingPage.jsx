@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { Target, Users, Trophy, BookOpen, Coffee, Zap, Star, Code, Calendar, Award } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 
 const LandingPage = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -19,6 +20,7 @@ const LandingPage = ({ onLogin }) => {
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
+  const { toast } = useToast();
 
   const handleInputChange = (e) => {
     setFormData({
@@ -45,12 +47,20 @@ const LandingPage = ({ onLogin }) => {
       const data = await response.json();
 
       if (response.ok) {
+        if (isLogin) {
+          toast.success('Welcome Back!', `Successfully logged in as ${data.user.name}`);
+        } else {
+          toast.success('Account Created!', 'Welcome to CAPS! You can now start collaborating.');
+        }
         onLogin(data.user, data.token);
       } else {
+        toast.error(isLogin ? 'Login Failed' : 'Registration Failed', data.message || 'An error occurred');
         setError(data.message || 'An error occurred');
       }
     } catch (error) {
-      setError(`Network error: ${error.message}. Please try again.`);
+      const errorMessage = `Network error: ${error.message}. Please try again.`;
+      toast.error('Connection Error', errorMessage);
+      setError(errorMessage);
     }
 
     setLoading(false);

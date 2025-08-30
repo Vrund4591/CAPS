@@ -1,3 +1,4 @@
+/* eslint-disable no-unused-vars */
 import React, { useState, useEffect } from 'react';
 import { 
   X, 
@@ -10,6 +11,7 @@ import {
   Monitor,
   Clipboard
 } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 
 const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
   const [formData, setFormData] = useState({
@@ -25,7 +27,12 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
   const [loading, setLoading] = useState(false);
   const [saveLoading, setSaveLoading] = useState(false);
   const [error, setError] = useState('');
-  const [searchTerm, setSearchTerm] = useState(''); // Add missing searchTerm state
+  const [searchTerm, setSearchTerm] = useState('');
+  const [classFilter, setClassFilter] = useState('ALL');
+  const [semesterFilter, setSemesterFilter] = useState('ALL');
+  const [divisionFilter, setDivisionFilter] = useState('ALL');
+  const [availabilityFilter, setAvailabilityFilter] = useState('ALL');
+  const { toast } = useToast();
 
   useEffect(() => {
     if (isOpen && group) {
@@ -75,11 +82,13 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
 
   const handleAddMember = (student) => {
     if (formData.members.length >= 4) {
+      toast.error('Team Full', 'Maximum 4 members allowed in a group');
       setError('Maximum 4 members allowed in a group');
       return;
     }
 
     if (formData.members.some(member => member.studentId === student.id)) {
+      toast.warning('Already Added', 'Student is already a member of this group');
       setError('Student is already a member of this group');
       return;
     }
@@ -93,10 +102,14 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
       ...prev,
       members: [...prev.members, newMember]
     }));
+    toast.success('Member Added', `${student.user.name} has been added to the group`);
     setError('');
   };
 
   const handleRemoveMember = (studentId) => {
+    const removedMember = formData.members.find(m => m.studentId === studentId);
+    const studentName = availableStudents.find(s => s.id === studentId)?.user?.name || 'Student';
+    
     const updatedMembers = formData.members.filter(m => m.studentId !== studentId);
     
     // If removing the leader, make the first remaining member the leader
@@ -108,6 +121,7 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
       ...prev,
       members: updatedMembers
     }));
+    toast.info('Member Removed', `${studentName} has been removed from the group`);
     setError('');
   };
 
@@ -140,14 +154,17 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
 
       if (response.ok) {
         const updatedGroup = await response.json();
+        toast.success('Group Updated!', 'Group information has been successfully updated');
         onGroupUpdated(updatedGroup.group);
         onClose();
       } else {
         const errorData = await response.json();
+        toast.error('Update Failed', errorData.message || 'Failed to update group');
         setError(errorData.message || 'Failed to update group');
       }
     } catch (error) {
       console.error('Update group failed:', error);
+      toast.error('Network Error', 'Please check your connection and try again.');
       setError('Network error. Please try again.');
     }
     setSaveLoading(false);
@@ -161,6 +178,20 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
       student.class.toLowerCase().includes(searchTerm.toLowerCase()) ||
       student.division.toLowerCase().includes(searchTerm.toLowerCase());
     
+    // Filter by class
+    const matchesClass = classFilter === 'ALL' || student.class === classFilter;
+    
+    // Filter by semester
+    const matchesSemester = semesterFilter === 'ALL' || student.semester?.toString() === semesterFilter;
+    
+    // Filter by division
+    const matchesDivision = divisionFilter === 'ALL' || student.division === divisionFilter;
+    
+    // Filter by availability
+    const matchesAvailability = availabilityFilter === 'ALL' || 
+      (availabilityFilter === 'AVAILABLE' && !student.groupMember) ||
+      (availabilityFilter === 'IN_GROUP' && student.groupMember);
+    
     // Then exclude students who are already members of this group
     const isAlreadyMember = formData.members.some(member => member.studentId === student.id);
     
@@ -169,8 +200,36 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
       student.groupMember.group.status === 'ACTIVE' && 
       student.groupMember.group.id !== group?.id;
     
-    return matchesSearch && !isAlreadyMember && !isInOtherActiveGroup;
+    return matchesSearch && matchesClass && matchesSemester && matchesDivision && 
+           matchesAvailability && !isAlreadyMember && !isInOtherActiveGroup;
   });
+
+  const handleQuickFilter = (filterType) => {
+    // Get current group leader's data for comparison
+    const leaderData = group?.members?.find(member => member.isLeader)?.student;
+    
+    switch (filterType) {
+      case 'sameClass':
+        setClassFilter(leaderData?.class || 'ALL');
+        break;
+      case 'sameDivision':
+        setDivisionFilter(leaderData?.division || 'ALL');
+        break;
+      case 'sameSemester':
+        setSemesterFilter(leaderData?.semester?.toString() || 'ALL');
+        break;
+      case 'availableOnly':
+        setAvailabilityFilter('AVAILABLE');
+        break;
+      case 'clearFilters':
+        setClassFilter('ALL');
+        setSemesterFilter('ALL');
+        setDivisionFilter('ALL');
+        setAvailabilityFilter('ALL');
+        setSearchTerm('');
+        break;
+    }
+  };
 
   if (!isOpen) return null;
 
@@ -379,16 +438,65 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
                   Add New Members
                 </h3>
                 
-                {/* Search */}
-                <div className="relative mb-4">
-                  <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
-                  <input
-                    type="text"
-                    placeholder="Search students..."
-                    value={searchTerm}
-                    onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none font-semibold"
-                  />
+                {/* Search with Advanced Filters */}
+                <div className="mb-4 space-y-3">
+                  <div className="relative">
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400" />
+                    <input
+                      type="text"
+                      placeholder="Search students by name, enrollment, class, or division..."
+                      value={searchTerm}
+                      onChange={(e) => setSearchTerm(e.target.value)}
+                      className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none font-semibold"
+                    />
+                  </div>
+                  
+                  {/* Quick Filter Buttons */}
+                  <div className="flex flex-wrap gap-2">
+                    <button 
+                      type="button"
+                      onClick={() => handleQuickFilter('sameClass')}
+                      className={`px-3 py-1 rounded-full text-xs font-bold hover:bg-blue-200 transition-colors ${
+                        classFilter !== 'ALL' ? 'bg-blue-200 text-blue-800' : 'bg-blue-100 text-blue-800'
+                      }`}
+                    >
+                      Same Class
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => handleQuickFilter('sameDivision')}
+                      className={`px-3 py-1 rounded-full text-xs font-bold hover:bg-green-200 transition-colors ${
+                        divisionFilter !== 'ALL' ? 'bg-green-200 text-green-800' : 'bg-green-100 text-green-800'
+                      }`}
+                    >
+                      Same Division
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => handleQuickFilter('sameSemester')}
+                      className={`px-3 py-1 rounded-full text-xs font-bold hover:bg-purple-200 transition-colors ${
+                        semesterFilter !== 'ALL' ? 'bg-purple-200 text-purple-800' : 'bg-purple-100 text-purple-800'
+                      }`}
+                    >
+                      Same Semester
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => handleQuickFilter('availableOnly')}
+                      className={`px-3 py-1 rounded-full text-xs font-bold hover:bg-yellow-200 transition-colors ${
+                        availabilityFilter === 'AVAILABLE' ? 'bg-yellow-200 text-yellow-800' : 'bg-yellow-100 text-yellow-800'
+                      }`}
+                    >
+                      Available Only
+                    </button>
+                    <button 
+                      type="button"
+                      onClick={() => handleQuickFilter('clearFilters')}
+                      className="px-3 py-1 bg-gray-100 text-gray-800 rounded-full text-xs font-bold hover:bg-gray-200 transition-colors"
+                    >
+                      Clear Filters
+                    </button>
+                  </div>
                 </div>
 
                 {/* Available Students */}
@@ -402,9 +510,12 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
                     filteredStudents.map((student) => {
                       const isInOtherGroup = student.groupMember && student.groupMember.group.id !== group?.id;
                       const groupStatus = student.groupMember?.group?.status;
+                      const canAddMember = formData.members.length < 4;
                       
                       return (
-                        <div key={student.id} className="flex items-center justify-between p-3 bg-white rounded-xl border-2 border-gray-200 hover:border-blue-300">
+                        <div key={student.id} className={`flex items-center justify-between p-3 rounded-xl border-2 ${
+                          canAddMember ? 'bg-white border-gray-200 hover:border-blue-300' : 'bg-gray-100 border-gray-300'
+                        }`}>
                           <div>
                             <h4 className="font-bold text-sm flex items-center gap-2">
                               {student.user.name}
@@ -425,11 +536,16 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
                           </div>
                           <button
                             onClick={() => handleAddMember(student)}
-                            disabled={formData.members.length >= 4}
-                            className="bg-green-500 text-white px-3 py-1 rounded text-xs font-bold hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1"
+                            disabled={!canAddMember}
+                            className={`px-3 py-1 rounded text-xs font-bold flex items-center gap-1 transition-colors ${
+                              canAddMember 
+                                ? 'bg-green-500 text-white hover:bg-green-600' 
+                                : 'bg-gray-400 text-gray-200 cursor-not-allowed'
+                            }`}
+                            title={!canAddMember ? 'Maximum 4 members allowed in a group' : 'Add to group'}
                           >
                             <UserPlus className="w-3 h-3" />
-                            Add
+                            {canAddMember ? 'Add' : 'Full'}
                           </button>
                         </div>
                       );

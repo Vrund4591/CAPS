@@ -15,6 +15,7 @@ import {
   Calendar,
   User
 } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 
 const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
   const [groups, setGroups] = useState([]);
@@ -23,18 +24,70 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [projectTypeFilter, setProjectTypeFilter] = useState('ALL');
   const [departmentFilter, setDepartmentFilter] = useState('ALL');
+  const [semesterFilter, setSemesterFilter] = useState('ALL');
+  const [teamSizeFilter, setTeamSizeFilter] = useState('ALL');
+  const [academicYearFilter, setAcademicYearFilter] = useState('ALL');
+  const [frontendTechFilter, setFrontendTechFilter] = useState('ALL');
+  const [backendTechFilter, setBackendTechFilter] = useState('ALL');
+  const [creationDateFilter, setCreationDateFilter] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({});
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState('desc');
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [showGroupDetails, setShowGroupDetails] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (isOpen) {
       fetchGroups();
     }
-  }, [isOpen, currentPage, statusFilter, projectTypeFilter, departmentFilter, searchTerm, sortBy, sortOrder]);
+  }, [
+    isOpen, 
+    currentPage, 
+    statusFilter, 
+    projectTypeFilter, 
+    departmentFilter, 
+    semesterFilter, 
+    teamSizeFilter, 
+    academicYearFilter, 
+    frontendTechFilter, 
+    backendTechFilter, 
+    creationDateFilter, 
+    searchTerm, 
+    sortBy, 
+    sortOrder
+  ]);
+
+  // Add filter change handlers that reset pagination
+  const handleFilterChange = (filterSetter) => {
+    return (value) => {
+      filterSetter(value);
+      setCurrentPage(1); // Reset to first page when filter changes
+    };
+  };
+
+  const handleStatusFilterChange = handleFilterChange(setStatusFilter);
+  const handleProjectTypeFilterChange = handleFilterChange(setProjectTypeFilter);
+  const handleDepartmentFilterChange = handleFilterChange(setDepartmentFilter);
+  const handleSemesterFilterChange = handleFilterChange(setSemesterFilter);
+  const handleTeamSizeFilterChange = handleFilterChange(setTeamSizeFilter);
+  const handleAcademicYearFilterChange = handleFilterChange(setAcademicYearFilter);
+  const handleFrontendTechFilterChange = handleFilterChange(setFrontendTechFilter);
+  const handleBackendTechFilterChange = handleFilterChange(setBackendTechFilter);
+  const handleCreationDateFilterChange = handleFilterChange(setCreationDateFilter);
+
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+    setCurrentPage(1); // Reset to first page when searching
+  };
+
+  const handleSortChange = (e) => {
+    const [field, order] = e.target.value.split('-');
+    setSortBy(field);
+    setSortOrder(order);
+    setCurrentPage(1); // Reset to first page when sorting changes
+  };
 
   const fetchGroups = async () => {
     setLoading(true);
@@ -43,12 +96,23 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
       const params = new URLSearchParams({
         page: currentPage,
         limit: 20,
-        status: statusFilter,
-        projectType: projectTypeFilter,
-        department: departmentFilter,
+        status: statusFilter !== 'ALL' ? statusFilter : '',
+        projectType: projectTypeFilter !== 'ALL' ? projectTypeFilter : '',
+        department: departmentFilter !== 'ALL' ? departmentFilter : '',
+        semester: semesterFilter !== 'ALL' ? semesterFilter : '',
+        teamSize: teamSizeFilter !== 'ALL' ? teamSizeFilter : '',
+        academicYear: academicYearFilter !== 'ALL' ? academicYearFilter : '',
+        frontendTech: frontendTechFilter !== 'ALL' ? frontendTechFilter : '',
+        backendTech: backendTechFilter !== 'ALL' ? backendTechFilter : '',
+        creationDate: creationDateFilter !== 'ALL' ? creationDateFilter : '',
         search: searchTerm,
         sortBy,
         sortOrder
+      });
+
+      // Remove empty parameters
+      Array.from(params.entries()).forEach(([key, value]) => {
+        if (!value) params.delete(key);
       });
 
       const response = await fetch(`http://localhost:5001/api/groups/admin/all?${params}`, {
@@ -61,18 +125,47 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
         setPagination(data.pagination || {});
       } else {
         console.error('Failed to fetch groups:', response.status);
-        // Fallback to regular groups endpoint
+        // Fallback to regular groups endpoint with client-side filtering
         const fallbackResponse = await fetch('http://localhost:5001/api/groups', {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
         if (fallbackResponse.ok) {
           const fallbackData = await fallbackResponse.json();
-          setGroups(fallbackData.groups || []);
+          let filteredGroups = fallbackData.groups || [];
+          
+          // Apply client-side filtering
+          filteredGroups = filteredGroups.filter(group => {
+            const matchesSearch = !searchTerm || 
+              group.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              group.groupId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+              group.teamLeader?.user?.name.toLowerCase().includes(searchTerm.toLowerCase());
+            
+            const matchesStatus = statusFilter === 'ALL' || group.status === statusFilter;
+            const matchesProjectType = projectTypeFilter === 'ALL' || group.projectType === projectTypeFilter;
+            const matchesDepartment = departmentFilter === 'ALL' || group.faculty?.department === departmentFilter;
+            
+            const matchesSemester = semesterFilter === 'ALL' || 
+              group.members?.some(member => member.student?.semester?.toString() === semesterFilter);
+            
+            const matchesTeamSize = teamSizeFilter === 'ALL' || 
+              group.members?.length?.toString() === teamSizeFilter;
+            
+            const matchesFrontendTech = frontendTechFilter === 'ALL' || 
+              (group.frontendTech && group.frontendTech.toLowerCase().includes(frontendTechFilter.toLowerCase()));
+            
+            const matchesBackendTech = backendTechFilter === 'ALL' || 
+              (group.backendTech && group.backendTech.toLowerCase().includes(backendTechFilter.toLowerCase()));
+            
+            return matchesSearch && matchesStatus && matchesProjectType && matchesDepartment &&
+                   matchesSemester && matchesTeamSize && matchesFrontendTech && matchesBackendTech;
+          });
+          
+          setGroups(filteredGroups);
           setPagination({
             currentPage: 1,
             totalPages: 1,
-            totalGroups: fallbackData.groups?.length || 0,
+            totalGroups: filteredGroups.length,
             hasNext: false,
             hasPrev: false
           });
@@ -83,7 +176,6 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
       }
     } catch (error) {
       console.error('Fetch groups error:', error);
-      // Set empty state on error
       setGroups([]);
       setPagination({});
     }
@@ -101,15 +193,15 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
       });
 
       if (response.ok) {
+        toast.success('Group Deleted', 'Group has been permanently deleted from the system');
         fetchGroups();
         onGroupUpdated();
-        alert('Group deleted successfully');
       } else {
         const data = await response.json();
-        alert(data.message || 'Failed to delete group');
+        toast.error('Delete Failed', data.message || 'Failed to delete group');
       }
     } catch (error) {
-      alert('Network error. Please try again.');
+      toast.error('Network Error', 'Please check your connection and try again.');
     }
   };
 
@@ -120,6 +212,19 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
       case 'REJECTED': return 'bg-red-100 text-red-800 border-red-500';
       default: return 'bg-gray-100 text-gray-800 border-gray-500';
     }
+  };
+
+  const handleClearAllFilters = () => {
+    setStatusFilter('ALL');
+    setProjectTypeFilter('ALL');
+    setDepartmentFilter('ALL');
+    setSemesterFilter('ALL');
+    setTeamSizeFilter('ALL');
+    setAcademicYearFilter('ALL');
+    setFrontendTechFilter('ALL');
+    setBackendTechFilter('ALL');
+    setCreationDateFilter('ALL');
+    setSearchTerm('');
   };
 
   if (!isOpen) return null;
@@ -165,14 +270,14 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
                 type="text"
                 placeholder="Search groups..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={handleSearchChange}
                 className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
               />
             </div>
 
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => handleStatusFilterChange(e.target.value)}
               className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
             >
               <option value="ALL">All Status</option>
@@ -183,7 +288,7 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
 
             <select
               value={projectTypeFilter}
-              onChange={(e) => setProjectTypeFilter(e.target.value)}
+              onChange={(e) => handleProjectTypeFilterChange(e.target.value)}
               className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
             >
               <option value="ALL">All Types</option>
@@ -193,30 +298,28 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
 
             <select
               value={departmentFilter}
-              onChange={(e) => setDepartmentFilter(e.target.value)}
+              onChange={(e) => handleDepartmentFilterChange(e.target.value)}
               className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
             >
               <option value="ALL">All Departments</option>
-              <option value="Computer Science">Computer Science</option>
-              <option value="Information Technology">Information Technology</option>
-              <option value="Electronics">Electronics</option>
-              <option value="Mechanical">Mechanical</option>
-              <option value="Civil">Civil</option>
+              <option value="IT">Information Technology</option>
+              <option value="CE">Computer Engineering</option>
+              <option value="MECH">Mechanical Engineering</option>
+              <option value="CIVIL">Civil Engineering</option>
+              <option value="ENTC">Electronics & Telecommunication</option>
             </select>
 
             <select
               value={`${sortBy}-${sortOrder}`}
-              onChange={(e) => {
-                const [field, order] = e.target.value.split('-');
-                setSortBy(field);
-                setSortOrder(order);
-              }}
+              onChange={handleSortChange}
               className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
             >
               <option value="createdAt-desc">Newest First</option>
               <option value="createdAt-asc">Oldest First</option>
               <option value="title-asc">Title A-Z</option>
               <option value="title-desc">Title Z-A</option>
+              <option value="status-asc">Status A-Z</option>
+              <option value="status-desc">Status Z-A</option>
             </select>
 
             <button
@@ -225,6 +328,104 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
             >
               <Download className="w-4 h-4" />
               Export
+            </button>
+          </div>
+
+          {/* Additional Advanced Filters */}
+          <div className="grid lg:grid-cols-4 gap-4 mb-4">
+            <select
+              value={semesterFilter}
+              onChange={(e) => handleSemesterFilterChange(e.target.value)}
+              className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
+            >
+              <option value="ALL">All Semesters</option>
+              {[1,2,3,4,5,6,7,8].map(sem => (
+                <option key={sem} value={sem}>Semester {sem}</option>
+              ))}
+            </select>
+
+            <select
+              value={teamSizeFilter}
+              onChange={(e) => handleTeamSizeFilterChange(e.target.value)}
+              className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
+            >
+              <option value="ALL">All Team Sizes</option>
+              <option value="1">1 Member</option>
+              <option value="2">2 Members</option>
+              <option value="3">3 Members</option>
+              <option value="4">4 Members (Full)</option>
+            </select>
+
+            <select
+              value={academicYearFilter}
+              onChange={(e) => handleAcademicYearFilterChange(e.target.value)}
+              className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
+            >
+              <option value="ALL">All Academic Years</option>
+              <option value="2024-25">2024-25</option>
+              <option value="2023-24">2023-24</option>
+              <option value="2022-23">2022-23</option>
+              <option value="2021-22">2021-22</option>
+            </select>
+
+            <select
+              value={creationDateFilter}
+              onChange={(e) => handleCreationDateFilterChange(e.target.value)}
+              className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
+            >
+              <option value="ALL">All Creation Dates</option>
+              <option value="today">Today</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="year">This Year</option>
+            </select>
+          </div>
+
+          {/* Technology Stack Filters */}
+          <div className="grid lg:grid-cols-4 gap-4">
+            <select
+              value={frontendTechFilter}
+              onChange={(e) => handleFrontendTechFilterChange(e.target.value)}
+              className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
+            >
+              <option value="ALL">All Frontend Tech</option>
+              <option value="React">React</option>
+              <option value="Angular">Angular</option>
+              <option value="Vue">Vue.js</option>
+              <option value="HTML">HTML/CSS/JS</option>
+              <option value="Flutter">Flutter</option>
+            </select>
+
+            <select
+              value={backendTechFilter}
+              onChange={(e) => handleBackendTechFilterChange(e.target.value)}
+              className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
+            >
+              <option value="ALL">All Backend Tech</option>
+              <option value="Node">Node.js</option>
+              <option value="Python">Python</option>
+              <option value="Java">Java</option>
+              <option value="PHP">PHP</option>
+              <option value="C#">C#/.NET</option>
+            </select>
+
+            <select
+              value={creationDateFilter}
+              onChange={(e) => handleCreationDateFilterChange(e.target.value)}
+              className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
+            >
+              <option value="ALL">All Creation Dates</option>
+              <option value="today">Today</option>
+              <option value="week">This Week</option>
+              <option value="month">This Month</option>
+              <option value="year">This Year</option>
+            </select>
+
+            <button
+              onClick={handleClearAllFilters}
+              className="px-4 py-2 bg-gray-200 text-gray-700 rounded-xl font-semibold hover:bg-gray-300 transition-colors"
+            >
+              Clear All Filters
             </button>
           </div>
         </div>
@@ -473,4 +674,4 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
 };
 
 export default GroupManagementModal;
-                          
+                         

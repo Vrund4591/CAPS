@@ -36,4 +36,28 @@ router.patch('/:id/read', authenticateToken, async (req, res) => {
   }
 });
 
+// Mark multiple notifications as read
+router.patch('/mark-all-read', authenticateToken, async (req, res) => {
+  try {
+    const { notificationIds } = req.body;
+    
+    if (!notificationIds || !Array.isArray(notificationIds)) {
+      return res.status(400).json({ message: 'Notification IDs array is required' });
+    }
+
+    await prisma.notification.updateMany({
+      where: { 
+        id: { in: notificationIds },
+        recipientEmail: req.user.email 
+      },
+      data: { isRead: true }
+    });
+
+    res.json({ message: 'Notifications marked as read' });
+  } catch (error) {
+    console.error('Mark multiple notifications read error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;

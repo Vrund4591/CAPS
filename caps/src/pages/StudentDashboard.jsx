@@ -15,13 +15,14 @@ import {
   X
 } from 'lucide-react';
 import Header from '../components/Header';
+import { useToast } from '../context/ToastContext';
 
 const StudentDashboard = ({ user, onLogout }) => {
   const [myGroup, setMyGroup] = useState(null);
-  const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const { toast } = useToast();
 
   useEffect(() => {
     fetchDashboardData();
@@ -45,23 +46,6 @@ const StudentDashboard = ({ user, onLogout }) => {
       } catch (error) {
         console.error('Group fetch error:', error);
         // User doesn't have a group yet or network error
-      }
-
-      // Fetch notifications
-      try {
-        const notificationResponse = await fetch('http://localhost:5001/api/notifications', {
-          headers: { 'Authorization': `Bearer ${token}` }
-        });
-        if (notificationResponse.ok) {
-          const notificationData = await notificationResponse.json();
-          setNotifications(notificationData.notifications?.slice(0, 3) || []);
-        } else {
-          console.error('Error fetching notifications:', notificationResponse.status);
-          setNotifications([]);
-        }
-      } catch (error) {
-        console.error('Notifications fetch error:', error);
-        setNotifications([]);
       }
 
     } catch (error) {
@@ -91,15 +75,15 @@ const StudentDashboard = ({ user, onLogout }) => {
       if (response.ok) {
         setMyGroup(null);
         setShowDeleteModal(false);
-        // Refresh dashboard data
+        toast.success('Group Deleted', 'Your group has been successfully deleted.');
         fetchDashboardData();
       } else {
         const errorData = await response.json();
-        alert(errorData.message || 'Failed to delete group');
+        toast.error('Delete Failed', errorData.message || 'Failed to delete group');
       }
     } catch (error) {
       console.error('Delete group failed:', error);
-      alert('Network error. Please try again.');
+      toast.error('Network Error', 'Please check your connection and try again.');
     }
     setDeleteLoading(false);
   };
@@ -154,18 +138,12 @@ const StudentDashboard = ({ user, onLogout }) => {
                     </div>
                     <p className="text-gray-600 mb-4">{myGroup.description}</p>
                     <div className="grid grid-cols-2 gap-4 text-sm">
-                      <div>
-                        <span className="font-bold text-gray-700">Group ID:</span> {myGroup.groupId}
-                      </div>
-                      <div>
-                        <span className="font-bold text-gray-700">Project Type:</span> {myGroup.projectType}
-                      </div>
-                      <div>
-                        <span className="font-bold text-gray-700">Faculty:</span> {myGroup.faculty?.user?.name || 'Not assigned'}
-                      </div>
-                      <div>
-                        <span className="font-bold text-gray-700">Members:</span> {myGroup.members?.length || 0}/4
-                      </div>
+                      <div><span className="font-bold">Group ID:</span> {myGroup.groupId}</div>
+                      <div><span className="font-bold">Project Type:</span> {myGroup.projectType}</div>
+                      <div><span className="font-bold">Faculty:</span> {myGroup.faculty?.user?.name || 'Not assigned'}</div>
+                      <div><span className="font-bold">Members:</span> {myGroup.members?.length || 0}/4</div>
+                      <div><span className="font-bold">Department:</span> {myGroup.faculty?.department || 'Not assigned'}</div>
+                      <div><span className="font-bold">Created:</span> {new Date(myGroup.createdAt).toLocaleDateString()}</div>
                     </div>
                     
                     {/* Show rejection reason if rejected */}
@@ -226,7 +204,7 @@ const StudentDashboard = ({ user, onLogout }) => {
             </div>
           </div>
 
-          {/* Quick Actions & Notifications */}
+          {/* Quick Actions */}
           <div className="space-y-8">
             {/* Quick Actions */}
             <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black">
@@ -261,42 +239,6 @@ const StudentDashboard = ({ user, onLogout }) => {
                   <Lightbulb className="w-5 h-5" />
                   Project Ideas (Coming Soon)
                 </div>
-              </div>
-            </div>
-
-            {/* Recent Notifications */}
-            <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black">
-              <h3 className="text-xl font-black text-gray-900 mb-6 flex items-center gap-2">
-                <Bell className="w-5 h-5 text-blue-500" />
-                Recent Notifications
-              </h3>
-              <div className="space-y-3">
-                {notifications.length > 0 ? (
-                  notifications.map((notification) => (
-                    <div
-                      key={notification.id}
-                      className={`p-3 rounded-2xl border-2 ${
-                        notification.isRead ? 'bg-gray-300' : 
-                        notification.type === 'GROUP_REJECTED' ? 'bg-red-50 border-red-500' :
-                        notification.type === 'GROUP_APPROVED' ? 'bg-green-50 border-green-500' :
-                        'bg-blue-50 border-blue-500'
-                      }`}
-                    >
-                      <h4 className="font-bold text-sm text-gray-900">{notification.title}</h4>
-                      <p className="text-xs text-gray-600 mt-1 whitespace-pre-line">{notification.message}</p>
-                      <p className="text-xs text-gray-500 mt-1">
-                        {new Date(notification.sentAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-center py-4 text-gray-500">
-                    <div className="text-2xl mb-2 flex justify-center">
-                      <Mail className="w-8 h-8" />
-                    </div>
-                    <p className="text-sm font-semibold">No notifications yet</p>
-                  </div>
-                )}
               </div>
             </div>
           </div>
@@ -337,3 +279,4 @@ const StudentDashboard = ({ user, onLogout }) => {
 };
 
 export default StudentDashboard;
+     

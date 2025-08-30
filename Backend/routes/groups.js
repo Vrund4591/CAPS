@@ -1174,4 +1174,56 @@ router.post('/emails', authenticateToken, authorizeRoles('FACULTY', 'ADMIN'), as
   }
 });
 
+// Additional endpoint to handle adding member with validation
+router.post('/:groupId/add-member', authenticateToken, authorizeRoles('STUDENT'), async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { studentId } = req.body; // Assuming studentId is sent in the request body
+
+    // Validate request
+    if (!studentId) {
+      return res.status(400).json({ message: 'Student ID is required' });
+    }
+
+    // Find the group
+    const group = await prisma.group.findUnique({
+      where: { groupId },
+      include: {
+        members: true
+      }
+    });
+
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found' });
+    }
+
+    // Check if the student is already a member
+    const existingMember = group.members.find(member => member.studentId === studentId);
+
+    if (existingMember) {
+      return res.status(400).json({ message: 'Student is already a member of this group' });
+    }
+
+    // Validate team size (max 4 including leader)
+    if (group.members.length >= 4) {
+      return res.status(400).json({ message: 'Maximum 4 members allowed in a group' });
+    }
+
+    // Add the member to the group
+    await prisma.groupMember.create({
+      data: {
+        studentId,
+        groupId: group.id,
+        isLeader: false // New members are not leaders by default
+      }
+    });
+
+    res.json({ message: 'Member added successfully' });
+
+  } catch (error) {
+    console.error('Add member to group error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
 module.exports = router;

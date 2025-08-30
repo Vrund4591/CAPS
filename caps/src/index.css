@@ -140,6 +140,85 @@ textarea:focus {
   transform: scale(1.02);
 }
 
+/* Toast specific animations */
+@keyframes toast-slide-in {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes toast-slide-out {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+.toast-enter {
+  animation: toast-slide-in 0.3s ease-out;
+}
+
+.toast-exit {
+  animation: toast-slide-out 0.3s ease-in;
+}
+
+/* Toast container positioning */
+.toast-container {
+  position: fixed;
+  top: 1rem;
+  right: 1rem;
+  z-index: 9999;
+  pointer-events: none;
+}
+
+.toast-container > * {
+  pointer-events: auto;
+  margin-bottom: 0.75rem;
+}
+
+/* Success pulse animation */
+@keyframes success-pulse {
+  0% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.05);
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+.toast-success {
+  animation: success-pulse 0.6s ease-out;
+}
+
+/* Error shake animation */
+@keyframes error-shake {
+  0%, 100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}
+
+.toast-error {
+  animation: error-shake 0.5s ease-out;
+}
+
 /* Mobile responsiveness */
 @media (max-width: 768px) {
   .card-brutal {

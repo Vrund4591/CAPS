@@ -33,6 +33,9 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
   const [pagination, setPagination] = useState({});
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState('desc');
+  const [departmentFilter, setDepartmentFilter] = useState('ALL');
+  const [semesterFilter, setSemesterFilter] = useState('ALL');
+  const [academicYearFilter, setAcademicYearFilter] = useState('ALL');
   const [editingUser, setEditingUser] = useState(null);
   const [showEditModal, setShowEditModal] = useState(false);
   const [bulkAction, setBulkAction] = useState('');
@@ -44,18 +47,41 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
     if (isOpen) {
       fetchUsers();
     }
-  }, [isOpen, currentPage, roleFilter, statusFilter, searchTerm, sortBy, sortOrder]);
+  }, [
+    isOpen, 
+    currentPage, 
+    roleFilter, 
+    statusFilter, 
+    searchTerm, 
+    sortBy, 
+    sortOrder,
+    departmentFilter,
+    semesterFilter,
+    academicYearFilter
+  ]);
 
   const fetchUsers = async () => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
       
-      // Use existing users endpoint with proper parameters
+      // Build query parameters with all filters
       const params = new URLSearchParams({
         page: currentPage,
         limit: 20,
-        role: roleFilter
+        role: roleFilter !== 'ALL' ? roleFilter : '',
+        status: statusFilter !== 'ALL' ? statusFilter : '',
+        search: searchTerm,
+        department: departmentFilter !== 'ALL' ? departmentFilter : '',
+        semester: semesterFilter !== 'ALL' ? semesterFilter : '',
+        academicYear: academicYearFilter !== 'ALL' ? academicYearFilter : '',
+        sortBy,
+        sortOrder
+      });
+
+      // Remove empty parameters
+      Array.from(params.entries()).forEach(([key, value]) => {
+        if (!value) params.delete(key);
       });
 
       const response = await fetch(`http://localhost:5001/api/users/all?${params}`, {
@@ -77,6 +103,33 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
       setPagination({});
     }
     setLoading(false);
+  };
+
+  // Add filter change handlers that reset pagination
+  const handleFilterChange = (filterSetter) => {
+    return (value) => {
+      filterSetter(value);
+      setCurrentPage(1); // Reset to first page when filter changes
+    };
+  };
+
+  // Replace direct filter setters with handlers
+  const handleRoleFilterChange = handleFilterChange(setRoleFilter);
+  const handleStatusFilterChange = handleFilterChange(setStatusFilter);
+  const handleDepartmentFilterChange = handleFilterChange(setDepartmentFilter);
+  const handleSemesterFilterChange = handleFilterChange(setSemesterFilter);
+  const handleAcademicYearFilterChange = handleFilterChange(setAcademicYearFilter);
+
+  const handleSearchChange = (e) => {
+    setSearchTerm(e.target.value);
+    setCurrentPage(1); // Reset to first page when searching
+  };
+
+  const handleSortChange = (e) => {
+    const [field, order] = e.target.value.split('-');
+    setSortBy(field);
+    setSortOrder(order);
+    setCurrentPage(1); // Reset to first page when sorting changes
   };
 
   const handleUserSelect = (userId) => {
@@ -252,14 +305,14 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
                 type="text"
                 placeholder="Search users..."
                 value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
+                onChange={handleSearchChange}
                 className="w-full pl-10 pr-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none font-semibold"
               />
             </div>
 
             <select
               value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
+              onChange={(e) => handleRoleFilterChange(e.target.value)}
               className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none font-semibold"
             >
               <option value="ALL">All Roles</option>
@@ -270,7 +323,7 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
 
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => handleStatusFilterChange(e.target.value)}
               className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none font-semibold"
             >
               <option value="ALL">All Status</option>
@@ -280,17 +333,15 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
 
             <select
               value={`${sortBy}-${sortOrder}`}
-              onChange={(e) => {
-                const [field, order] = e.target.value.split('-');
-                setSortBy(field);
-                setSortOrder(order);
-              }}
+              onChange={handleSortChange}
               className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none font-semibold"
             >
               <option value="createdAt-desc">Newest First</option>
               <option value="createdAt-asc">Oldest First</option>
               <option value="name-asc">Name A-Z</option>
               <option value="name-desc">Name Z-A</option>
+              <option value="email-asc">Email A-Z</option>
+              <option value="email-desc">Email Z-A</option>
             </select>
 
             <button
@@ -300,6 +351,45 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
               <Download className="w-4 h-4" />
               Export
             </button>
+          </div>
+
+          {/* Additional Filters for Students and Faculty */}
+          <div className="grid lg:grid-cols-3 gap-4 mb-4">
+            <select
+              value={departmentFilter}
+              onChange={(e) => handleDepartmentFilterChange(e.target.value)}
+              className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none font-semibold"
+            >
+              <option value="ALL">All Departments</option>
+              <option value="IT">Information Technology</option>
+              <option value="CE">Computer Engineering</option>
+              <option value="MECH">Mechanical Engineering</option>
+              <option value="CIVIL">Civil Engineering</option>
+              <option value="ENTC">Electronics & Telecommunication</option>
+            </select>
+
+            <select
+              value={semesterFilter}
+              onChange={(e) => handleSemesterFilterChange(e.target.value)}
+              className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none font-semibold"
+            >
+              <option value="ALL">All Semesters</option>
+              {[1,2,3,4,5,6,7,8].map(sem => (
+                <option key={sem} value={sem}>Semester {sem}</option>
+              ))}
+            </select>
+
+            <select
+              value={academicYearFilter}
+              onChange={(e) => handleAcademicYearFilterChange(e.target.value)}
+              className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none font-semibold"
+            >
+              <option value="ALL">All Academic Years</option>
+              <option value="2024-25">2024-25</option>
+              <option value="2023-24">2023-24</option>
+              <option value="2022-23">2022-23</option>
+              <option value="2021-22">2021-22</option>
+            </select>
           </div>
 
           {/* Bulk Actions */}
@@ -540,3 +630,4 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
 };
 
 export default UserManagementModal;
+               
