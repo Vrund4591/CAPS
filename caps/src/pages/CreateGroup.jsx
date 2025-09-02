@@ -277,6 +277,7 @@ const CreateGroup = ({ user, onLogout }) => {
   const [faculty, setFaculty] = useState([]);
   const [availableStudents, setAvailableStudents] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [dataLoading, setDataLoading] = useState(true); // Add separate loading for initial data
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isEditing, setIsEditing] = useState(false);
@@ -292,15 +293,21 @@ const CreateGroup = ({ user, onLogout }) => {
   const { toast } = useToast();
 
   useEffect(() => {
-    fetchData();
-    
-    // Check if editing an existing group
-    const urlParams = new URLSearchParams(window.location.search);
-    const editGroupId = urlParams.get('edit');
-    if (editGroupId) {
-      setIsEditing(true);
-      fetchGroupForEditing(editGroupId);
-    }
+    const initializeData = async () => {
+      setDataLoading(true);
+      await fetchData();
+      
+      // Check if editing an existing group
+      const urlParams = new URLSearchParams(window.location.search);
+      const editGroupId = urlParams.get('edit');
+      if (editGroupId) {
+        setIsEditing(true);
+        await fetchGroupForEditing(editGroupId);
+      }
+      setDataLoading(false);
+    };
+
+    initializeData();
   }, []);
 
   const fetchGroupForEditing = async (groupId) => {
@@ -395,30 +402,71 @@ const CreateGroup = ({ user, onLogout }) => {
     try {
       const token = localStorage.getItem('token');
       
-      // Fetch faculty
-      const facultyResponse = await fetch('http://localhost:5001/api/users/faculty', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (facultyResponse.ok) {
-        const facultyData = await facultyResponse.json();
-        setFaculty(facultyData.faculty);
+      if (!token) {
+        setError('Authentication token not found. Please log in again.');
+        return;
       }
 
-      // Fetch available students
-      const studentsResponse = await fetch('http://localhost:5001/api/groups/available-students', {
-        headers: { 'Authorization': `Bearer ${token}` }
-      });
-      if (studentsResponse.ok) {
-        const studentsData = await studentsResponse.json();
-        // Enhanced filtering - exclude current user and add more student info
-        const filteredStudents = studentsData.students.filter(student => 
-          student.id !== user.profile.id
-        );
-        setAvailableStudents(filteredStudents);
+      // Fetch faculty
+      try {
+        const facultyResponse = await fetch('http://localhost:5001/api/users/faculty', {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (facultyResponse.ok) {
+          const facultyData = await facultyResponse.json();
+          setFaculty(facultyData.faculty);
+        } else {
+          console.error('Failed to fetch faculty:', facultyResponse.status);
+        }
+      } catch (facultyError) {
+        console.error('Faculty fetch error:', facultyError);
+      }
+
+      // Fetch available students with retry logic
+      let retryCount = 0;
+      const maxRetries = 3;
+      
+      while (retryCount < maxRetries) {
+        try {
+          const studentsResponse = await fetch('http://localhost:5001/api/groups/available-students', {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          
+          if (studentsResponse.ok) {
+            const studentsData = await studentsResponse.json();
+            setAvailableStudents(studentsData.students || []);
+            setError(''); // Clear any previous errors
+            break; // Success, exit retry loop
+          } else if (studentsResponse.status === 400) {
+            // Profile not found error - handle gracefully
+            const errorData = await studentsResponse.json();
+            if (errorData.message?.includes('Student profile not found')) {
+              setError('Your student profile is being set up. Please refresh the page in a moment or contact administrator if this persists.');
+              break;
+            } else {
+              setError(errorData.message || 'Failed to load students');
+              break;
+            }
+          } else {
+            throw new Error(`HTTP ${studentsResponse.status}`);
+          }
+        } catch (studentsError) {
+          console.error(`Students fetch attempt ${retryCount + 1} failed:`, studentsError);
+          retryCount++;
+          
+          if (retryCount >= maxRetries) {
+            setError('Failed to load student data. Please refresh the page or try again later.');
+            setAvailableStudents([]);
+          } else {
+            // Wait before retrying
+            await new Promise(resolve => setTimeout(resolve, 1000 * retryCount));
+          }
+        }
       }
 
     } catch (error) {
-      setError('Failed to load data: ' + error.message);
+      console.error('Data fetch failed:', error);
+      setError('Failed to load data. Please refresh the page or try again later.');
     }
   };
 
@@ -547,6 +595,21 @@ const CreateGroup = ({ user, onLogout }) => {
     endIndex: Math.min(currentPage * studentsPerPage, filteredStudents.length)
   }), [filteredStudents.length, currentPage, studentsPerPage]);
 
+  // Add loading state handling in render
+  if (dataLoading) {
+    return (
+      <div className="min-h-screen" style={{backgroundColor: '#FFFFF4'}}>
+        <Header user={user} onLogout={onLogout} hasGroup={false} />
+        <div className="flex items-center justify-center h-96">
+          <div className="bg-white p-8 rounded-2xl shadow-lg border-4 border-black">
+            <div className="animate-spin w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full mx-auto"></div>
+            <p className="mt-4 font-bold text-gray-800">Loading group creation page...</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen" style={{backgroundColor: '#FFFFF4'}}>
       <Header user={user} onLogout={onLogout} hasGroup={isEditing ? false : false} />
@@ -574,8 +637,19 @@ const CreateGroup = ({ user, onLogout }) => {
           {/* Form */}
           <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black">
             {error && (
-              <div className="bg-red-100 border-3 border-red-500 text-red-700 p-4 rounded-2xl mb-6 font-bold">
-                {error}
+              <div className="bg-red-100 border-3 border-red-500 text-red-700 p-4 rounded-2xl mb-6 font-bold flex items-center gap-2">
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                <div>
+                  {error}
+                  {error.includes('refresh the page') && (
+                    <button
+                      onClick={() => window.location.reload()}
+                      className="ml-3 bg-red-500 text-white px-3 py-1 rounded-lg text-sm font-bold hover:bg-red-600 transition-colors"
+                    >
+                      Refresh Page
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -715,7 +789,22 @@ const CreateGroup = ({ user, onLogout }) => {
                   )}
                 </p>
                 
-                {availableStudents.length > 0 ? (
+                {error && error.includes('Student profile not found') ? (
+                  <div className="text-center py-8 text-orange-600 bg-orange-50 rounded-2xl border-2 border-orange-300">
+                    <div className="text-4xl mb-4 flex justify-center">
+                      <User className="w-12 h-12" />
+                    </div>
+                    <p className="font-semibold mb-2">Setting up your profile...</p>
+                    <p className="text-sm mb-4">Your student profile is being initialized. This usually takes a moment.</p>
+                    <button
+                      type="button"
+                      onClick={fetchData}
+                      className="bg-orange-500 text-white px-4 py-2 rounded-lg font-bold hover:bg-orange-600 transition-colors"
+                    >
+                      Try Again
+                    </button>
+                  </div>
+                ) : availableStudents.length > 0 ? (
                   <>
                     {/* Enhanced Search Bar with Filters */}
                     <SearchBar
@@ -764,8 +853,21 @@ const CreateGroup = ({ user, onLogout }) => {
                     <div className="text-4xl mb-4 flex justify-center">
                       <User className="w-12 h-12" />
                     </div>
-                    <p className="font-semibold">No available students found</p>
-                    <p className="text-sm">All students may already be in groups</p>
+                    <p className="font-semibold mb-2">
+                      {dataLoading ? 'Loading students...' : 'No available students found'}
+                    </p>
+                    <p className="text-sm">
+                      {dataLoading ? 'Please wait while we load the student list' : 'All students may already be in groups'}
+                    </p>
+                    {!dataLoading && (
+                      <button
+                        type="button"
+                        onClick={fetchData}
+                        className="mt-3 bg-blue-500 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-600 transition-colors"
+                      >
+                        Retry Loading
+                      </button>
+                    )}
                   </div>
                 )}
 
@@ -801,11 +903,13 @@ const CreateGroup = ({ user, onLogout }) => {
               <div className="text-center">
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={loading || dataLoading}
                   className="bg-blue-500 hover:bg-blue-600 text-white font-black py-4 px-8 rounded-2xl border-3 border-black shadow-lg hover:shadow-xl transform hover:-translate-y-1 transition-all duration-200 disabled:opacity-50 disabled:transform-none flex items-center gap-2 justify-center"
                 >
                   <Rocket className="w-5 h-5" />
-                  {loading ? (isEditing ? 'Recreating Group...' : 'Creating Group...') : (isEditing ? 'Recreate Group' : 'Create Group')}
+                  {loading ? (isEditing ? 'Recreating Group...' : 'Creating Group...') : 
+                   dataLoading ? 'Loading...' :
+                   (isEditing ? 'Recreate Group' : 'Create Group')}
                 </button>
               </div>
             </form>

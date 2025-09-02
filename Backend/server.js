@@ -12,6 +12,9 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5001;
 
+// Note: Install these dependencies if not already installed:
+// npm install multer csv-parse
+
 // Email transporter configuration
 const createEmailTransporter = () => {
   return nodemailer.createTransport({

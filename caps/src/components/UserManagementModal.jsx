@@ -21,6 +21,7 @@ import {
   AlertTriangle,
   Check
 } from 'lucide-react';
+import { useToast } from '../context/ToastContext';
 
 const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
   const [users, setUsers] = useState([]);
@@ -79,6 +80,8 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
       department: ''
     }
   });
+
+  const { toast } = useToast();
 
   useEffect(() => {
     if (isOpen) {
@@ -538,6 +541,59 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
     setShowEditModal(true);
   };
 
+  const handleExportCSV = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      
+      // Build query parameters based on current filters
+      const params = new URLSearchParams();
+      if (roleFilter !== 'ALL') params.append('role', roleFilter);
+      if (departmentFilter !== 'ALL') params.append('department', departmentFilter);
+      if (semesterFilter !== 'ALL') params.append('semester', semesterFilter);
+      if (searchTerm.trim()) params.append('search', searchTerm.trim());
+
+      const response = await fetch(`http://localhost:5001/api/users/export/csv?${params}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        // Get the blob data
+        const blob = await response.blob();
+        
+        // Create download link
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        
+        // Get filename from response headers or use default
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = 'CAPS_Users_Export.csv';
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+          if (filenameMatch) {
+            filename = filenameMatch[1];
+          }
+        }
+        
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        
+        // Cleanup
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+        
+        toast.success('Export Complete', `Downloaded ${filename} successfully`);
+      } else {
+        const errorData = await response.json();
+        toast.error('Export Failed', errorData.message || 'Failed to export CSV');
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Export Error', 'Failed to download CSV file');
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -635,11 +691,11 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
             </select>
 
             <button
-              onClick={() => {/* Export functionality */}}
+              onClick={handleExportCSV}
               className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-xl transition-colors flex items-center gap-2"
             >
               <Download className="w-4 h-4" />
-              Export
+              Export CSV
             </button>
           </div>
 
@@ -1458,4 +1514,3 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
 };
 
 export default UserManagementModal;
-                    

@@ -19,17 +19,55 @@ const generateGroupId = async () => {
 // Get available students for team selection
 router.get('/available-students', authenticateToken, authorizeRoles('STUDENT'), async (req, res) => {
   try {
+    // Enhanced user validation with better error handling
+    if (!req.user) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+    
+    if (req.user.role !== 'STUDENT') {
+      return res.status(403).json({ message: 'Only students can access this endpoint' });
+    }
+    
+    // Check if student profile exists, if not try to fetch it
+    let studentProfile = req.user.student;
+    if (!studentProfile) {
+      studentProfile = await prisma.student.findUnique({
+        where: { userId: req.user.id },
+        include: {
+          user: {
+            select: { id: true, name: true, email: true }
+          }
+        }
+      });
+      
+      if (!studentProfile) {
+        return res.status(400).json({ 
+          message: 'Student profile not found. Please contact administrator to complete your profile setup.',
+          userInfo: {
+            id: req.user.id,
+            email: req.user.email,
+            role: req.user.role
+          }
+        });
+      }
+    }
+
     // Get all students who are not already in an active group
     const availableStudents = await prisma.student.findMany({
       where: {
-        OR: [
-          { groupMember: null }, // Students not in any group
-          { 
-            groupMember: {
-              group: {
-                status: 'REJECTED' // Students from rejected groups can join new groups
+        AND: [
+          { id: { not: studentProfile.id } }, // Exclude current user
+          {
+            OR: [
+              { groupMember: null }, // Students not in any group
+              { 
+                groupMember: {
+                  group: {
+                    status: 'REJECTED' // Students from rejected groups can join new groups
+                  }
+                }
               }
-            }
+            ]
           }
         ]
       },
@@ -57,7 +95,7 @@ router.post('/create', authenticateToken, authorizeRoles('STUDENT'), async (req,
   try {
     const { title, description, facultyId, projectType, frontendTech, backendTech, teamMemberIds = [] } = req.body;
     
-    // Comprehensive user validation
+    // Enhanced user validation with better error handling
     if (!req.user) {
       return res.status(401).json({ message: 'User not authenticated' });
     }
@@ -66,18 +104,31 @@ router.post('/create', authenticateToken, authorizeRoles('STUDENT'), async (req,
       return res.status(403).json({ message: 'Only students can create groups' });
     }
     
-    if (!req.user.student) {
-      return res.status(400).json({ 
-        message: 'Student profile not found. Please contact administrator to complete your profile setup.',
-        userInfo: {
-          id: req.user.id,
-          email: req.user.email,
-          role: req.user.role
+    // Check if student profile exists, if not try to fetch it
+    let studentProfile = req.user.student;
+    if (!studentProfile) {
+      studentProfile = await prisma.student.findUnique({
+        where: { userId: req.user.id },
+        include: {
+          user: {
+            select: { id: true, name: true, email: true }
+          }
         }
       });
+      
+      if (!studentProfile) {
+        return res.status(400).json({ 
+          message: 'Student profile not found. Please contact administrator to complete your profile setup.',
+          userInfo: {
+            id: req.user.id,
+            email: req.user.email,
+            role: req.user.role
+          }
+        });
+      }
     }
     
-    const studentId = req.user.student.id;
+    const studentId = studentProfile.id;
     
     // Validate required fields
     if (!title || !description || !facultyId || !projectType) {
@@ -609,7 +660,36 @@ router.patch('/:groupId/status', authenticateToken, authorizeRoles('FACULTY'), a
 // Get student's group
 router.get('/my-group', authenticateToken, authorizeRoles('STUDENT'), async (req, res) => {
   try {
-    const studentId = req.user.student.id;
+    // Enhanced user validation
+    if (!req.user) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+    
+    // Check if student profile exists, if not try to fetch it
+    let studentProfile = req.user.student;
+    if (!studentProfile) {
+      studentProfile = await prisma.student.findUnique({
+        where: { userId: req.user.id },
+        include: {
+          user: {
+            select: { id: true, name: true, email: true }
+          }
+        }
+      });
+      
+      if (!studentProfile) {
+        return res.status(400).json({ 
+          message: 'Student profile not found. Please contact administrator to complete your profile setup.',
+          userInfo: {
+            id: req.user.id,
+            email: req.user.email,
+            role: req.user.role
+          }
+        });
+      }
+    }
+    
+    const studentId = studentProfile.id;
 
     const groupMember = await prisma.groupMember.findFirst({
       where: { studentId },
@@ -647,7 +727,37 @@ router.get('/my-group', authenticateToken, authorizeRoles('STUDENT'), async (req
 router.delete('/:groupId/delete', authenticateToken, authorizeRoles('STUDENT'), async (req, res) => {
   try {
     const { groupId } = req.params;
-    const studentId = req.user.student.id;
+    
+    // Enhanced user validation
+    if (!req.user) {
+      return res.status(401).json({ message: 'User not authenticated' });
+    }
+    
+    // Check if student profile exists, if not try to fetch it
+    let studentProfile = req.user.student;
+    if (!studentProfile) {
+      studentProfile = await prisma.student.findUnique({
+        where: { userId: req.user.id },
+        include: {
+          user: {
+            select: { id: true, name: true, email: true }
+          }
+        }
+      });
+      
+      if (!studentProfile) {
+        return res.status(400).json({ 
+          message: 'Student profile not found. Please contact administrator to complete your profile setup.',
+          userInfo: {
+            id: req.user.id,
+            email: req.user.email,
+            role: req.user.role
+          }
+        });
+      }
+    }
+    
+    const studentId = studentProfile.id;
 
     // Find the group and verify ownership and status
     const group = await prisma.group.findFirst({
@@ -1690,6 +1800,95 @@ router.get('/admin/students-without-groups', authenticateToken, authorizeRoles('
   } catch (error) {
     console.error('Get students without groups error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Export groups to CSV (Admin/Faculty only)
+router.get('/export/csv', authenticateToken, authorizeRoles('ADMIN', 'FACULTY'), async (req, res) => {
+  try {
+    const { status, projectType, department } = req.query;
+    
+    let whereClause = {};
+    
+    // Apply faculty restriction
+    if (req.user.role === 'FACULTY') {
+      whereClause.facultyId = req.user.faculty.id;
+    }
+    
+    // Apply filters
+    if (status && status !== 'ALL') whereClause.status = status;
+    if (projectType && projectType !== 'ALL') whereClause.projectType = projectType;
+
+    const groups = await prisma.group.findMany({
+      where: whereClause,
+      include: {
+        members: {
+          include: {
+            student: {
+              include: { user: true }
+            }
+          }
+        },
+        teamLeader: {
+          include: { user: true }
+        },
+        faculty: {
+          include: { user: true }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Generate CSV content
+    const csvHeader = 'group_id,title,status,project_type,team_leader,faculty,member_count,members,created_date\n';
+    
+    const csvRows = groups.map(group => {
+      const groupId = group.groupId || '';
+      const title = group.title || '';
+      const status = group.status || '';
+      const projectType = group.projectType || '';
+      const teamLeader = group.teamLeader?.user?.name || 'Unknown';
+      const faculty = group.faculty?.user?.name || 'Not assigned';
+      const memberCount = group.members?.length || 0;
+      const members = group.members?.map(m => m.student?.user?.name || 'Unknown').join('; ') || '';
+      const createdDate = new Date(group.createdAt).toLocaleDateString();
+
+      const escapeCSVField = (field) => {
+        if (typeof field !== 'string') field = String(field);
+        if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+          return `"${field.replace(/"/g, '""')}"`;
+        }
+        return field;
+      };
+
+      return [
+        escapeCSVField(groupId),
+        escapeCSVField(title),
+        escapeCSVField(status),
+        escapeCSVField(projectType),
+        escapeCSVField(teamLeader),
+        escapeCSVField(faculty),
+        escapeCSVField(memberCount),
+        escapeCSVField(members),
+        escapeCSVField(createdDate)
+      ].join(',');
+    });
+
+    const csvContent = csvHeader + csvRows.join('\n');
+
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    const filename = `CAPS_Groups_Export_${timestamp}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+
+    res.send(csvContent);
+
+  } catch (error) {
+    console.error('Groups CSV export error:', error);
+    res.status(500).json({ message: 'Error generating groups CSV export' });
   }
 });
 

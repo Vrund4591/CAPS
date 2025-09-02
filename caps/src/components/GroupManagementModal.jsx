@@ -385,6 +385,51 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
       `;
   };
 
+  const handleExportCSV = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      
+      const params = new URLSearchParams();
+      if (statusFilter !== 'ALL') params.append('status', statusFilter);
+      if (projectTypeFilter !== 'ALL') params.append('projectType', projectTypeFilter);
+      if (departmentFilter !== 'ALL') params.append('department', departmentFilter);
+
+      const response = await fetch(`http://localhost:5001/api/groups/export/csv?${params}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = 'CAPS_Groups_Export.csv';
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+          if (filenameMatch) {
+            filename = filenameMatch[1];
+          }
+        }
+        
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+        
+        toast.success('Export Complete', `Downloaded ${filename} successfully`);
+      } else {
+        const errorData = await response.json();
+        toast.error('Export Failed', errorData.message || 'Failed to export CSV');
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      toast.error('Export Error', 'Failed to download CSV file');
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -527,11 +572,11 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
             </select>
 
             <button
-              onClick={() => {/* Export functionality */}}
+              onClick={handleExportCSV}
               className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-xl transition-colors flex items-center gap-2"
             >
               <Download className="w-4 h-4" />
-              Export
+              Export CSV
             </button>
 
             <button
@@ -1102,4 +1147,3 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
 };
 
 export default GroupManagementModal;
-          

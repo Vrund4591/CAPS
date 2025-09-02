@@ -32,7 +32,8 @@ import {
   Calendar,
   ChevronDown,
   ChevronUp,
-  MoreVertical
+  MoreVertical,
+  X
 } from 'lucide-react';
 import Header from '../components/Header';
 import UserManagementModal from '../components/UserManagementModal';
@@ -67,6 +68,14 @@ const AdminDashboard = ({ user, onLogout }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterRole, setFilterRole] = useState('ALL');
   const { toast } = useToast();
+  const [showBulkAuthorizeModal, setShowBulkAuthorizeModal] = useState(false);
+  const [bulkEmails, setBulkEmails] = useState('');
+  const [bulkRole, setBulkRole] = useState('STUDENT');
+  const [csvFile, setCsvFile] = useState(null);
+  const [csvUploading, setCsvUploading] = useState(false);
+  const [showCsvUploadModal, setShowCsvUploadModal] = useState(false);
+  const [csvPreviewData, setCsvPreviewData] = useState([]);
+  const [csvValidationErrors, setCsvValidationErrors] = useState([]);
 
   useEffect(() => {
     fetchDashboardData();
@@ -254,6 +263,201 @@ const AdminDashboard = ({ user, onLogout }) => {
     const matchesRole = filterRole === 'ALL' || authUser.role === filterRole;
     return matchesSearch && matchesRole;
   });
+
+  const handleBulkAuthorize = async () => {
+    const emails = bulkEmails.split(',').map(email => email.trim()).filter(email => email);
+    if (emails.length === 0) {
+      return toast.error('No emails provided', 'Please enter email addresses to authorize');
+    }
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5001/api/users/authorize/bulk', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ emails, role: bulkRole })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast.success('Bulk Authorization Successful', `${data.authorizedCount} users authorized`);
+        setBulkEmails('');
+        fetchAuthorizedUsers();
+      } else {
+        const data = await response.json();
+        toast.error('Bulk Authorization Failed', data.message || 'Failed to authorize users');
+      }
+    } catch (error) {
+      toast.error('Network Error', 'Failed to authorize users. Please try again.');
+      console.error('Bulk authorization error:', error);
+    }
+  };
+
+  const handleCsvFileSelect = (event) => {
+    const file = event.target.files[0];
+    if (file && file.type === 'text/csv') {
+      setCsvFile(file);
+      previewCsvFile(file);
+    } else {
+      toast.error('Invalid File', 'Please select a valid CSV file');
+      setCsvFile(null);
+    }
+  };
+
+  const previewCsvFile = (file) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = e.target.result;
+      const lines = text.split('\n').filter(line => line.trim());
+      
+      if (lines.length === 0) {
+        setCsvValidationErrors(['CSV file is empty']);
+        return;
+      }
+      
+      const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+      
+      // Validate headers
+      const requiredHeaders = ['email', 'role'];
+      const optionalHeaders = ['name', 'class', 'semester', 'division', 'department'];
+      const allValidHeaders = [...requiredHeaders, ...optionalHeaders];
+      
+      const invalidHeaders = headers.filter(h => h && !allValidHeaders.includes(h));
+      const missingHeaders = requiredHeaders.filter(h => !headers.includes(h));
+      
+      const errors = [];
+      if (missingHeaders.length > 0) {
+        errors.push(`Missing required headers: ${missingHeaders.join(', ')}`);
+      }
+      if (invalidHeaders.length > 0) {
+        errors.push(`Invalid headers: ${invalidHeaders.join(', ')}`);
+      }
+      
+      // Additional validation for header format
+      if (headers.length === 0) {
+        errors.push('No headers found in CSV file');
+      }
+      
+      setCsvValidationErrors(errors);
+      
+      // Parse preview data (first 10 rows after header)
+      const previewRows = lines.slice(1, 11).filter(line => line.trim());
+      const previewData = previewRows.map((line, index) => {
+        const values = line.split(',').map(v => v.trim());
+        const row = { lineNumber: index + 2 };
+        headers.forEach((header, i) => {
+          if (header) row[header] = values[i] || '';
+        });
+        return row;
+      });
+      
+      setCsvPreviewData(previewData);
+      
+      // Log for debugging
+      console.log('CSV Headers:', headers);
+      console.log('Preview Data:', previewData);
+      console.log('Validation Errors:', errors);
+    };
+    reader.readAsText(file);
+  };
+
+  const handleCsvUpload = async () => {
+    if (!csvFile) {
+      toast.error('No File Selected', 'Please select a CSV file to upload');
+      return;
+    }
+
+    if (csvValidationErrors.length > 0) {
+      toast.error('Validation Errors', 'Please fix the CSV format errors before uploading');
+      return;
+    }
+
+    setCsvUploading(true);
+    const formData = new FormData();
+    formData.append('csvFile', csvFile);
+
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5001/api/users/authorize-csv', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`
+        },
+        body: formData
+      });
+
+      const data = await response.json();
+
+      if (response.ok) {
+        toast.success(
+          'CSV Upload Complete!', 
+          `Successfully processed ${data.results.authorized.length} authorizations. ` +
+          `Skipped: ${data.results.skipped.length}, Errors: ${data.results.errors.length}`
+        );
+        
+        setCsvFile(null);
+        setCsvPreviewData([]);
+        setCsvValidationErrors([]);
+        setShowCsvUploadModal(false);
+        fetchAuthorizedUsers();
+        
+        // Show detailed results if there are errors
+        if (data.results.errors.length > 0) {
+          console.log('CSV Upload Errors:', data.results.errors);
+          toast.error('Some Records Failed', `${data.results.errors.length} records had errors. Check console for details.`);
+        }
+      } else {
+        console.error('CSV Upload Error Response:', data);
+        toast.error('CSV Upload Failed', data.message || 'Failed to process CSV file');
+      }
+    } catch (error) {
+      console.error('CSV upload network error:', error);
+      toast.error('Network Error', 'Failed to upload CSV file. Please check your connection and try again.');
+    } finally {
+      setCsvUploading(false);
+    }
+  };
+
+  const handleExportUsers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5001/api/users/export/csv', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = 'CAPS_Users_Export.csv';
+        if (contentDisposition) {
+          const filenameMatch = contentDisposition.match(/filename="(.+)"/);
+          if (filenameMatch) {
+            filename = filenameMatch[1];
+          }
+        }
+        
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(link);
+        
+        alert('Users exported successfully!');
+      } else {
+        alert('Failed to export users');
+      }
+    } catch (error) {
+      console.error('Export error:', error);
+      alert('Failed to export users');
+    }
+  };
 
   if (loading) {
     return (
@@ -467,6 +671,24 @@ const AdminDashboard = ({ user, onLogout }) => {
                   <Key className="w-5 h-5 text-blue-500" />
                   Quick Authorize
                 </h3>
+                
+                {/* Action Buttons */}
+                <div className="flex space-x-3 mb-4">
+                  <button
+                    onClick={() => setShowBulkAuthorizeModal(true)}
+                    className="flex-1 bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 flex items-center justify-center gap-2"
+                  >
+                    <UserPlus className="w-4 h-4" />
+                    Bulk Text
+                  </button>
+                  <button
+                    onClick={() => setShowCsvUploadModal(true)}
+                    className="flex-1 bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 flex items-center justify-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    CSV Upload
+                  </button>
+                </div>
                 
                 {message && (
                   <div className={`p-4 rounded-2xl border-3 mb-4 font-bold ${
@@ -893,6 +1115,213 @@ const AdminDashboard = ({ user, onLogout }) => {
         onClose={() => setShowAnalyticsModal(false)}
         analytics={analytics}
       />
+
+      {/* Bulk Authorize Modal */}
+      {showBulkAuthorizeModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60">
+          <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black max-w-md w-full mx-4">
+            <div className="flex justify-between items-center mb-4">
+              <h3 className="text-xl font-black text-gray-900">Bulk User Authorization</h3>
+              <button
+                onClick={() => setShowBulkAuthorizeModal(false)}
+                className="text-gray-500 hover:text-gray-700"
+              >
+                <X className="w-6 h-6" />
+              </button>
+            </div>
+            
+            <div className="mb-4">
+              <label className="block text-sm font-bold text-gray-700 mb-2">
+                Email Addresses (comma separated)
+              </label>
+              <textarea
+                value={bulkEmails}
+                onChange={(e) => setBulkEmails(e.target.value)}
+                className="w-full p-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none resize-none h-24"
+                placeholder="user1@college.edu, user2@college.edu"
+              />
+            </div>
+
+            <div className="mb-4">
+              <label className="block text-sm font-bold text-gray-700 mb-2">
+                Role
+              </label>
+              <select
+                value={bulkRole}
+                onChange={(e) => setBulkRole(e.target.value)}
+                className="w-full p-3 border-2 border-gray-300 rounded-xl focus:border-blue-500 focus:outline-none"
+              >
+                <option value="STUDENT">Student</option>
+                <option value="FACULTY">Faculty</option>
+                <option value="ADMIN">Admin</option>
+              </select>
+            </div>
+
+            <div className="flex justify-end gap-4">
+              <button
+                onClick={() => setShowBulkAuthorizeModal(false)}
+                className="flex-1 bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-xl transition-all duration-200"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleBulkAuthorize}
+                className="flex-1 bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded-xl transition-all duration-200 flex items-center justify-center gap-2"
+              >
+                <UserPlus className="w-4 h-4" />
+                Authorize Users
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* CSV Upload Modal */}
+      {showCsvUploadModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60">
+          <div className="bg-white p-6 rounded-3xl shadow-2xl border-4 border-black max-w-4xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-xl font-black text-gray-900 flex items-center gap-2">
+                <Download className="w-6 h-6 text-green-600" />
+                CSV Bulk Authorization
+              </h3>
+              <button
+                onClick={() => setShowCsvUploadModal(false)}
+                className="bg-gray-500 hover:bg-gray-600 text-white p-2 rounded-2xl transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* CSV Format Instructions */}
+            <div className="bg-blue-50 p-4 rounded-2xl border-3 border-blue-500 mb-6">
+              <h4 className="font-bold text-blue-800 mb-3">📋 CSV Format Requirements</h4>
+              <div className="text-sm text-blue-700 space-y-2">
+                <p><strong>Required columns:</strong> email, role</p>
+                <p><strong>Optional columns:</strong> name, class, semester, division, department</p>
+                <p><strong>Valid roles:</strong> STUDENT, FACULTY, ADMIN</p>
+                <div className="bg-blue-100 p-3 rounded-xl mt-3">
+                  <p className="font-bold">Example CSV format:</p>
+                  <code className="text-xs block mt-1">
+                    email,role,name,class,semester,division,department<br/>
+                    student1@college.edu,STUDENT,John Doe,BE-IT,5,A,<br/>
+                    faculty1@college.edu,FACULTY,Dr. Smith,,,IT<br/>
+                    admin1@college.edu,ADMIN,Admin User,,,,
+                  </code>
+                </div>
+                <div className="flex justify-between items-center mt-4 pt-3 border-t border-blue-300">
+                  <span className="text-blue-800 font-bold">💡 Need a template?</span>
+                  <button
+                    onClick={handleExportUsers}
+                    className="bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-xl transition-colors flex items-center gap-2"
+                  >
+                    <Download className="w-4 h-4" />
+                    Export Current Users as Template
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* File Upload */}
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-bold text-gray-700 mb-2">
+                  Select CSV File
+                </label>
+                <input
+                  type="file"
+                  accept=".csv"
+                  onChange={handleCsvFileSelect}
+                  className="w-full p-3 border-2 border-gray-300 rounded-xl focus:border-green-500 focus:outline-none font-semibold"
+                />
+              </div>
+
+              {/* Validation Errors */}
+              {csvValidationErrors.length > 0 && (
+                <div className="bg-red-50 p-4 rounded-xl border-2 border-red-300">
+                  <h5 className="font-bold text-red-800 mb-2">❌ Validation Errors:</h5>
+                  <ul className="text-sm text-red-700 list-disc list-inside">
+                    {csvValidationErrors.map((error, index) => (
+                      <li key={index}>{error}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Preview Data */}
+              {csvPreviewData.length > 0 && (
+                <div className="bg-gray-50 p-4 rounded-xl border-2 border-gray-300">
+                  <h5 className="font-bold text-gray-800 mb-3">📊 Preview (First 10 rows):</h5>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="bg-gray-200">
+                          <th className="p-2 text-left">Line</th>
+                          <th className="p-2 text-left">Email</th>
+                          <th className="p-2 text-left">Role</th>
+                          <th className="p-2 text-left">Name</th>
+                          <th className="p-2 text-left">Class</th>
+                          <th className="p-2 text-left">Semester</th>
+                          <th className="p-2 text-left">Division</th>
+                          <th className="p-2 text-left">Department</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {csvPreviewData.map((row, index) => (
+                          <tr key={index} className="border-b">
+                            <td className="p-2">{row.lineNumber}</td>
+                            <td className="p-2">{row.email}</td>
+                            <td className="p-2">
+                              <span className={`px-2 py-1 rounded text-xs font-bold ${
+                                ['STUDENT', 'FACULTY', 'ADMIN'].includes(row.role) 
+                                  ? 'bg-green-100 text-green-800' 
+                                  : 'bg-red-100 text-red-800'
+                              }`}>
+                                {row.role}
+                              </span>
+                            </td>
+                            <td className="p-2">{row.name}</td>
+                            <td className="p-2">{row.class}</td>
+                            <td className="p-2">{row.semester}</td>
+                            <td className="p-2">{row.division}</td>
+                            <td className="p-2">{row.department}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+            </div>
+            
+            <div className="flex space-x-3 mt-6">
+              <button
+                onClick={() => setShowCsvUploadModal(false)}
+                className="flex-1 bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-xl"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleCsvUpload}
+                disabled={!csvFile || csvValidationErrors.length > 0 || csvUploading}
+                className="flex-1 bg-green-500 hover:bg-green-600 disabled:bg-gray-400 text-white font-bold py-2 px-4 rounded-xl flex items-center justify-center gap-2"
+              >
+                {csvUploading ? (
+                  <>
+                    <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                    Processing...
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    Upload & Authorize
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

@@ -1,9 +1,27 @@
 const express = require('express');
-const bcrypt = require('bcryptjs'); // Add this import
+const bcrypt = require('bcryptjs');
+const multer = require('multer');
+const csvParser = require('csv-parser'); // Change this import
+const { Readable } = require('stream'); // Add this import
 const { prisma } = require('../config/database');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
 
 const router = express.Router();
+
+// Configure multer for CSV file uploads
+const upload = multer({
+  storage: multer.memoryStorage(),
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'text/csv' || file.originalname.endsWith('.csv')) {
+      cb(null, true);
+    } else {
+      cb(new Error('Only CSV files are allowed'), false);
+    }
+  },
+  limits: {
+    fileSize: 5 * 1024 * 1024 // 5MB limit
+  }
+});
 
 // Get all faculty (for group creation)
 router.get('/faculty', authenticateToken, async (req, res) => {
@@ -355,11 +373,259 @@ router.post('/bulk-authorize', authenticateToken, authorizeRoles('ADMIN'), async
 
     res.json({
       message: `Bulk authorization completed`,
-      results
+      results,
+      authorizedCount: results.authorized.length // Add this for frontend compatibility
     });
   } catch (error) {
     console.error('Bulk authorize error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// CSV Bulk Authorization (Admin only)
+router.post('/authorize-csv', authenticateToken, authorizeRoles('ADMIN'), upload.single('csvFile'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'CSV file is required' });
+    }
+
+    const csvData = req.file.buffer.toString('utf8');
+    const records = [];
+    
+    // Parse CSV using stream approach with proper header handling
+    const stream = Readable.from([csvData]);
+    
+    await new Promise((resolve, reject) => {
+      stream
+        .pipe(csvParser({
+          skipEmptyLines: true,
+          skipLinesWithError: true,
+          // Don't use headers callback, let csv-parser handle it automatically
+          mapHeaders: ({ header, index }) => {
+            // Clean and normalize each header
+            return header.trim().toLowerCase();
+          }
+        }))
+        .on('data', (data) => {
+          // Clean up the data values
+          const cleanData = {};
+          Object.keys(data).forEach(key => {
+            const cleanKey = key.trim().toLowerCase();
+            cleanData[cleanKey] = data[key] ? data[key].trim() : '';
+          });
+          records.push(cleanData);
+        })
+        .on('end', resolve)
+        .on('error', (error) => {
+          console.error('CSV parsing error:', error);
+          reject(error);
+        });
+    });
+
+    console.log('Parsed CSV records:', records.length);
+    console.log('Sample record:', records[0]);
+
+    if (records.length === 0) {
+      return res.status(400).json({ message: 'CSV file is empty or contains no valid data' });
+    }
+
+    // Validate CSV structure
+    const requiredColumns = ['email', 'role'];
+    const firstRecord = records[0];
+    const availableColumns = Object.keys(firstRecord);
+    
+    console.log('Available columns:', availableColumns);
+    
+    const missingColumns = requiredColumns.filter(col => !availableColumns.includes(col));
+    
+    if (missingColumns.length > 0) {
+      return res.status(400).json({ 
+        message: `Missing required columns: ${missingColumns.join(', ')}. Available columns: ${availableColumns.join(', ')}`,
+        debug: {
+          requiredColumns,
+          availableColumns,
+          firstRecord
+        }
+      });
+    }
+
+    const results = {
+      authorized: [],
+      skipped: [],
+      errors: []
+    };
+
+    // Process each record
+    for (let i = 0; i < records.length; i++) {
+      const record = records[i];
+      const lineNumber = i + 2; // +2 because of header row and 0-based index
+      
+      try {
+        const email = record.email?.trim();
+        const role = record.role?.trim().toUpperCase();
+        const name = record.name?.trim() || '';
+        const userClass = record.class?.trim() || '';
+        const semester = record.semester?.trim() || '';
+        const division = record.division?.trim() || '';
+        const department = record.department?.trim() || '';
+
+        // Validate email
+        if (!email || !email.includes('@')) {
+          results.errors.push({
+            line: lineNumber,
+            email: email || 'missing',
+            error: 'Invalid email address'
+          });
+          continue;
+        }
+
+        // Validate role
+        if (!['STUDENT', 'FACULTY', 'ADMIN'].includes(role)) {
+          results.errors.push({
+            line: lineNumber,
+            email,
+            error: `Invalid role: ${role}. Must be STUDENT, FACULTY, or ADMIN`
+          });
+          continue;
+        }
+
+        // Check if already authorized
+        const existingAuth = await prisma.authorizedUser.findFirst({
+          where: { email, role }
+        });
+
+        if (existingAuth) {
+          results.skipped.push({
+            line: lineNumber,
+            email,
+            reason: `Already authorized as ${role}`
+          });
+          continue;
+        }
+
+        // Check if user already exists
+        const existingUser = await prisma.user.findUnique({ where: { email } });
+        if (existingUser) {
+          results.skipped.push({
+            line: lineNumber,
+            email,
+            reason: 'User already exists in system'
+          });
+          continue;
+        }
+
+        // Create authorization
+        await prisma.authorizedUser.create({
+          data: { email, role }
+        });
+
+        // Send authorization email with additional info
+        try {
+          const authContent = `
+            <p class="content">Hello there! 👋</p>
+            <p class="content">🎉 <strong>Great news!</strong> You've been authorized to join the CAPS family through bulk authorization! Get ready for an amazing collaborative experience!</p>
+            
+            <div class="info-box">
+              <div class="info-item">
+                <div class="info-label">Email Address</div>
+                <div class="info-value">${email}</div>
+              </div>
+              <div class="info-item">
+                <div class="info-label">Authorized Role</div>
+                <div class="info-value">${role}</div>
+              </div>
+              ${name ? `
+                <div class="info-item">
+                  <div class="info-label">Name</div>
+                  <div class="info-value">${name}</div>
+                </div>
+              ` : ''}
+              ${role === 'STUDENT' && userClass ? `
+                <div class="info-item">
+                  <div class="info-label">Class</div>
+                  <div class="info-value">${userClass}</div>
+                </div>
+              ` : ''}
+              ${role === 'STUDENT' && semester ? `
+                <div class="info-item">
+                  <div class="info-label">Semester</div>
+                  <div class="info-value">${semester}</div>
+                </div>
+              ` : ''}
+              ${role === 'STUDENT' && division ? `
+                <div class="info-item">
+                  <div class="info-label">Division</div>
+                  <div class="info-value">${division}</div>
+                </div>
+              ` : ''}
+              ${role === 'FACULTY' && department ? `
+                <div class="info-item">
+                  <div class="info-label">Department</div>
+                  <div class="info-value">${department}</div>
+                </div>
+              ` : ''}
+            </div>
+            
+            <span class="success-badge">✅ CSV Authorization Complete!</span>
+            
+            <p class="content">You can now register for the CAPS system using this email address. During registration, you'll need to provide your ${role === 'STUDENT' ? 'enrollment details' : role === 'FACULTY' ? 'department information' : 'profile information'}. Complete your registration to access the platform and start your collaborative journey! 🚀</p>
+            
+            <a href="#" class="cta-button">Complete Registration</a>
+            
+            <p class="content" style="margin-top: 30px; color: #7C3AED; font-weight: bold;">
+              Welcome to the future of collaborative learning! 🌟
+            </p>
+          `;
+
+          const authEmailHTML = global.createCAPSEmailTemplate(
+            'You\'re Authorized for CAPS! 🎓', 
+            authContent,
+            '#10B981'
+          );
+
+          if (global.sendEmail) {
+            await global.sendEmail(email, 'CAPS System Authorization - You\'re In!', authEmailHTML);
+          }
+        } catch (emailError) {
+          console.log('Email sending failed for:', email, emailError.message);
+          // Don't fail the authorization if email fails
+        }
+
+        results.authorized.push({
+          line: lineNumber,
+          email,
+          role,
+          additionalData: {
+            name,
+            class: userClass,
+            semester,
+            division,
+            department
+          }
+        });
+
+      } catch (error) {
+        console.error('Processing error for line', lineNumber, ':', error);
+        results.errors.push({
+          line: lineNumber,
+          email: record.email || 'unknown',
+          error: error.message
+        });
+      }
+    }
+
+    res.json({
+      message: `CSV processing completed. Authorized: ${results.authorized.length}, Skipped: ${results.skipped.length}, Errors: ${results.errors.length}`,
+      results,
+      totalProcessed: records.length
+    });
+
+  } catch (error) {
+    console.error('CSV authorization error:', error);
+    res.status(500).json({ 
+      message: 'Error processing CSV file',
+      error: error.message 
+    });
   }
 });
 
@@ -748,13 +1014,16 @@ router.post('/bulk-action', authenticateToken, authorizeRoles('ADMIN'), async (r
     if (!Array.isArray(userIds) || userIds.length === 0) {
       return res.status(400).json({ message: 'No users selected' });
     }
+    
     let processedCount = 0;
+    
     switch (action) {
       case 'activate':
       case 'deactivate':
         // Since we don't have isActive field, just return success
         processedCount = userIds.length;
         break;
+        
       case 'delete':
         // Only delete non-admin users who are not in active groups
         const usersToCheck = await prisma.user.findMany({
@@ -772,24 +1041,143 @@ router.post('/bulk-action', authenticateToken, authorizeRoles('ADMIN'), async (r
             }
           }
         });
+        
         const deletableUserIds = usersToCheck
           .filter(user => user.student?.groupMember?.group?.status !== 'ACTIVE')
           .map(user => user.id);
+        
         if (deletableUserIds.length > 0) {
-          const deleteResult = await prisma.user.deleteMany({
+          await prisma.user.deleteMany({
             where: { id: { in: deletableUserIds } }
           });
-          processedCount = deleteResult.count;
+          processedCount = deletableUserIds.length;
         }
         break;
     }
+
     res.json({
-      message: `Bulk ${action} completed successfully`,
+      message: `${action.charAt(0).toUpperCase() + action.slice(1)} operation completed`,
       processedCount
     });
   } catch (error) {
     console.error('Bulk action error:', error);
     res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Export users to CSV (Admin only)
+router.get('/export/csv', authenticateToken, authorizeRoles('ADMIN'), async (req, res) => {
+  try {
+    const { role, department, semester, search } = req.query;
+    
+    // Build where clause for filtering
+    const whereClause = {};
+    if (role && role !== 'ALL') {
+      whereClause.role = role;
+    }
+
+    // Get all users with their profile data
+    let users = await prisma.user.findMany({
+      where: whereClause,
+      include: {
+        student: true,
+        faculty: true
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+
+    // Apply additional filters
+    if (search && search.trim()) {
+      const searchTerm = search.toLowerCase();
+      users = users.filter(user => 
+        user.name.toLowerCase().includes(searchTerm) ||
+        user.email.toLowerCase().includes(searchTerm) ||
+        (user.student?.enrollmentNo && user.student.enrollmentNo.toLowerCase().includes(searchTerm))
+      );
+    }
+
+    if (department && department !== 'ALL') {
+      users = users.filter(user => {
+        if (user.role === 'STUDENT' && user.student?.class) {
+          const classParts = user.student.class.split('-');
+          return classParts.length > 1 && classParts[1] === department;
+        } else if (user.role === 'FACULTY' && user.faculty?.department) {
+          return user.faculty.department === department;
+        }
+        return false;
+      });
+    }
+
+    if (semester && semester !== 'ALL') {
+      users = users.filter(user => 
+        user.role === 'STUDENT' && user.student?.semester?.toString() === semester
+      );
+    }
+
+    // Generate CSV content
+    const csvHeader = 'email,role,name,class,semester,division,department\n';
+    
+    const csvRows = users.map(user => {
+      const email = user.email || '';
+      const role = user.role || '';
+      const name = user.name || '';
+      
+      let userClass = '';
+      let semester = '';
+      let division = '';
+      let department = '';
+
+      if (user.role === 'STUDENT' && user.student) {
+        userClass = user.student.class || '';
+        semester = user.student.semester || '';
+        division = user.student.division || '';
+        // Extract department from class (e.g., "BE-IT" -> "IT")
+        if (user.student.class) {
+          const classParts = user.student.class.split('-');
+          if (classParts.length > 1) {
+            department = classParts[1];
+          }
+        }
+      } else if (user.role === 'FACULTY' && user.faculty) {
+        department = user.faculty.department || '';
+      }
+
+      // Escape commas and quotes in CSV fields
+      const escapeCSVField = (field) => {
+        if (typeof field !== 'string') field = String(field);
+        if (field.includes(',') || field.includes('"') || field.includes('\n')) {
+          return `"${field.replace(/"/g, '""')}"`;
+        }
+        return field;
+      };
+
+      return [
+        escapeCSVField(email),
+        escapeCSVField(role),
+        escapeCSVField(name),
+        escapeCSVField(userClass),
+        escapeCSVField(semester),
+        escapeCSVField(division),
+        escapeCSVField(department)
+      ].join(',');
+    });
+
+    const csvContent = csvHeader + csvRows.join('\n');
+
+    // Set response headers for CSV download
+    const timestamp = new Date().toISOString().slice(0, 19).replace(/:/g, '-');
+    const filename = `CAPS_Users_Export_${timestamp}.csv`;
+
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.setHeader('Pragma', 'no-cache');
+
+    res.send(csvContent);
+
+  } catch (error) {
+    console.error('CSV export error:', error);
+    res.status(500).json({ message: 'Error generating CSV export' });
   }
 });
 
