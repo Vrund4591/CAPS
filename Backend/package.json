@@ -16,7 +16,8 @@
     "dotenv": "^16.3.1",
     "bcryptjs": "^2.4.3",
     "jsonwebtoken": "^9.0.2",
-    "@prisma/client": "^6.10.1"
+    "@prisma/client": "^6.10.1",
+    "nodemailer": "^6.9.7"
   },
   "devDependencies": {
     "nodemon": "^3.0.1",

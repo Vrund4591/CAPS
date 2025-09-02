@@ -163,7 +163,7 @@ const FacultyDashboard = ({ user, onLogout }) => {
       const matchesStatus = statusFilter === 'ALL' || group.status === statusFilter;
       const matchesProjectType = projectTypeFilter === 'ALL' || group.projectType === projectTypeFilter;
       
-      // Filter by student data from group members
+      // Filter by student data from group members - Fixed semester filtering
       const matchesSemester = semesterFilter === 'ALL' || 
         group.members?.some(member => member.student?.semester?.toString() === semesterFilter);
       

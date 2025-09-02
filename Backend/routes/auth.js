@@ -83,6 +83,67 @@ router.post('/register', async (req, res) => {
       return user;
     });
 
+    // Send welcome email
+    const welcomeContent = `
+      <p class="content">Dear ${name},</p>
+      <p class="content">🎉 <strong>Welcome to the CAPS family!</strong> Your account has been successfully created and you're ready to start your collaborative journey.</p>
+      
+      <div class="info-box">
+        <div class="info-item">
+          <div class="info-label">Name</div>
+          <div class="info-value">${name}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Email</div>
+          <div class="info-value">${email}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Role</div>
+          <div class="info-value">${role}</div>
+        </div>
+        ${role === 'STUDENT' ? `
+          <div class="info-item">
+            <div class="info-label">Enrollment No</div>
+            <div class="info-value">${additionalData.enrollmentNo}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Class</div>
+            <div class="info-value">${additionalData.class}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Division</div>
+            <div class="info-value">${additionalData.division}</div>
+          </div>
+          <div class="info-item">
+            <div class="info-label">Semester</div>
+            <div class="info-value">${additionalData.semester}</div>
+          </div>
+        ` : ''}
+        ${role === 'FACULTY' ? `
+          <div class="info-item">
+            <div class="info-label">Department</div>
+            <div class="info-value">${additionalData.department}</div>
+          </div>
+        ` : ''}
+      </div>
+      
+      <span class="success-badge">✅ Account Created Successfully!</span>
+      
+      <p class="content">You can now log in to the CAPS system and start ${role === 'STUDENT' ? 'creating or joining groups for awesome projects' : 'managing groups and mentoring brilliant students'}! 🚀</p>
+      
+      <a href="#" class="cta-button">Start Your Journey</a>
+      
+      <p class="content" style="margin-top: 30px;">Ready to make some magic happen? Let's build something amazing together! 💪</p>
+    `;
+
+    const welcomeEmailHTML = global.createCAPSEmailTemplate(
+      'Welcome to CAPS! 🎓', 
+      welcomeContent,
+      '#10B981'
+    );
+
+    await global.sendEmail(email, 'Welcome to CAPS System - Let\'s Get Started!', welcomeEmailHTML);
+
     const token = generateToken(result.id);
 
     res.status(201).json({
@@ -121,6 +182,43 @@ router.post('/login', async (req, res) => {
     if (!isPasswordValid) {
       return res.status(400).json({ message: 'Invalid credentials' });
     }
+
+    // Send login notification email
+    const loginContent = `
+      <p class="content">Hey ${user.name}! 👋</p>
+      <p class="content">We just wanted to let you know that you've successfully logged into your CAPS account.</p>
+      
+      <div class="info-box">
+        <div class="info-item">
+          <div class="info-label">Login Time</div>
+          <div class="info-value">${new Date().toLocaleString()}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Role</div>
+          <div class="info-value">${user.role}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Status</div>
+          <div class="info-value">✅ Secure Login Successful</div>
+        </div>
+      </div>
+      
+      <span class="success-badge">🔐 Secure Access Confirmed</span>
+      
+      <p class="content">If this wasn't you, please contact the administrator immediately! Otherwise, have an awesome session! 🌟</p>
+      
+      <p class="content" style="margin-top: 20px; font-size: 14px; color: #6B7280;">
+        <strong>Security Tip:</strong> Always log out when using shared computers! 🛡️
+      </p>
+    `;
+
+    const loginEmailHTML = global.createCAPSEmailTemplate(
+      'Secure Login Detected! 🔐', 
+      loginContent,
+      '#3B82F6'
+    );
+
+    await global.sendEmail(email, 'CAPS Login Notification - Welcome Back!', loginEmailHTML);
 
     const token = generateToken(user.id);
 

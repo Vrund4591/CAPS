@@ -19,16 +19,30 @@ const generateGroupId = async () => {
 // Get available students for team selection
 router.get('/available-students', authenticateToken, authorizeRoles('STUDENT'), async (req, res) => {
   try {
-    // Get all students who are not already in a group
+    // Get all students who are not already in an active group
     const availableStudents = await prisma.student.findMany({
       where: {
-        groupMember: null // Students not in any group
+        OR: [
+          { groupMember: null }, // Students not in any group
+          { 
+            groupMember: {
+              group: {
+                status: 'REJECTED' // Students from rejected groups can join new groups
+              }
+            }
+          }
+        ]
       },
       include: {
         user: {
           select: { id: true, name: true, email: true }
         }
-      }
+      },
+      orderBy: [
+        { semester: 'asc' },
+        { class: 'asc' },
+        { user: { name: 'asc' } }
+      ]
     });
 
     res.json({ students: availableStudents });
@@ -174,16 +188,105 @@ router.post('/create', authenticateToken, authorizeRoles('STUDENT'), async (req,
       }
     });
 
-    // Create notifications for team members
+    // Send email to faculty
+    const facultyContent = `
+      <p class="content">Dear Prof. ${result.group.faculty.user.name},</p>
+      <p class="content">🎯 <strong>Exciting news!</strong> A new group has been created and is eagerly waiting for your approval to start their amazing project journey!</p>
+      
+      <div class="info-box">
+        <div class="info-item">
+          <div class="info-label">Group Name</div>
+          <div class="info-value">${title}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Group ID</div>
+          <div class="info-value">${result.group.groupId}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Team Leader</div>
+          <div class="info-value">${req.user.name}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Project Type</div>
+          <div class="info-value">${projectType}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Total Members</div>
+          <div class="info-value">${memberStudents.length + 1} students</div>
+        </div>
+        ${teamMemberNames ? `
+          <div class="info-item">
+            <div class="info-label">Team Members</div>
+            <div class="info-value">${teamMemberNames}</div>
+          </div>
+        ` : ''}
+      </div>
+      
+      <div style="background-color: #F3F4F6; padding: 15px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #7C3AED;">
+        <div class="info-label">Project Description</div>
+        <div style="color: #1F2937; font-weight: 600; margin-top: 5px;">${description}</div>
+      </div>
+      
+      <span class="warning-badge">⏰ Awaiting Your Review</span>
+      
+      <p class="content">Please log in to the CAPS system to review this group and help these students start their collaborative journey! 🚀</p>
+      
+      <a href="#" class="cta-button">Review Group Now</a>
+    `;
+
+    const facultyEmailHTML = global.createCAPSEmailTemplate(
+      'New Group Awaiting Approval! 📋', 
+      facultyContent,
+      '#7C3AED'
+    );
+
+    await global.sendEmail(result.group.faculty.user.email, `New Group Request - ${title}`, facultyEmailHTML);
+
+    // Send email to team members
     if (memberStudents.length > 0) {
-      await prisma.notification.createMany({
-        data: memberStudents.map(student => ({
-          title: 'Added to Group',
-          message: `You have been added to group "${title}" by ${req.user.name}. Waiting for faculty approval.`,
-          type: 'GROUP_INVITATION',
-          recipientEmail: student.user.email
-        }))
-      });
+      for (const student of memberStudents) {
+        const memberContent = `
+          <p class="content">Hey ${student.user.name}! 🎉</p>
+          <p class="content"><strong>Awesome news!</strong> You've been added to an exciting new group project by ${req.user.name}!</p>
+          
+          <div class="info-box">
+            <div class="info-item">
+              <div class="info-label">Group Name</div>
+              <div class="info-value">${title}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Group ID</div>
+              <div class="info-value">${result.group.groupId}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Team Leader</div>
+              <div class="info-value">${req.user.name}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Project Type</div>
+              <div class="info-value">${projectType}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Faculty Guide</div>
+              <div class="info-value">Prof. ${result.group.faculty.user.name}</div>
+            </div>
+          </div>
+          
+          <span class="warning-badge">⏳ Waiting for Faculty Approval</span>
+          
+          <p class="content">The group is currently waiting for faculty approval. You'll be notified as soon as the status changes. Get ready to create something amazing! 💪</p>
+          
+          <a href="#" class="cta-button">View Group Details</a>
+        `;
+
+        const memberEmailHTML = global.createCAPSEmailTemplate(
+          'You\'re In a New Group! 🤝', 
+          memberContent,
+          '#2563EB'
+        );
+
+        await global.sendEmail(student.user.email, `Added to Group - ${title}`, memberEmailHTML);
+      }
     }
 
     res.status(201).json({
@@ -346,14 +449,47 @@ router.patch('/:groupId/status', authenticateToken, authorizeRoles('FACULTY'), a
     // Create notifications for all group members
     const allMembers = group.members.map(member => member.student.user.email);
     
-    let notificationTitle, notificationMessage;
+    let notificationTitle, notificationMessage, emailSubject, emailHTML;
     
     if (status === 'APPROVED') {
       notificationTitle = 'Group Approved! 🎉';
       notificationMessage = `Congratulations! Your group "${group.title}" has been approved by Prof. ${group.faculty.user.name}. You can now start working on your project.`;
+      emailSubject = `🎉 Group Approved - ${group.title}`;
+      emailHTML = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #059669;">🎉 Congratulations! Your Group is Approved!</h2>
+          <p>Dear Team,</p>
+          <p>Great news! Your group has been approved and you can now start working on your project:</p>
+          <div style="background-color: #ECFDF5; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #059669;">
+            <h3 style="color: #065F46;">${group.title}</h3>
+            <p><strong>Group ID:</strong> ${group.groupId}</p>
+            <p><strong>Approved by:</strong> Prof. ${group.faculty.user.name}</p>
+            <p><strong>Project Type:</strong> ${group.projectType}</p>
+            <p><strong>Status:</strong> <span style="color: #059669; font-weight: bold;">ACTIVE</span></p>
+          </div>
+          <p>You can now collaborate with your team members and start developing your project. Good luck!</p>
+          <p>Best regards,<br>CAPS Team</p>
+        </div>
+      `;
     } else {
       notificationTitle = 'Group Request Rejected';
       notificationMessage = `Your group "${group.title}" has been rejected by Prof. ${group.faculty.user.name}.\n\nReason: ${rejectionReason}\n\nYou can create a new group with the necessary improvements.`;
+      emailSubject = `Group Request Rejected - ${group.title}`;
+      emailHTML = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #DC2626;">Group Request Rejected</h2>
+          <p>Dear Team,</p>
+          <p>Unfortunately, your group request has been rejected:</p>
+          <div style="background-color: #FEF2F2; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #DC2626;">
+            <h3 style="color: #991B1B;">${group.title}</h3>
+            <p><strong>Group ID:</strong> ${group.groupId}</p>
+            <p><strong>Rejected by:</strong> Prof. ${group.faculty.user.name}</p>
+            <p><strong>Reason:</strong> ${rejectionReason}</p>
+          </div>
+          <p>Don't worry! You can create a new group with the necessary improvements. Please address the feedback and try again.</p>
+          <p>Best regards,<br>CAPS Team</p>
+        </div>
+      `;
     }
 
     await prisma.notification.createMany({
@@ -364,6 +500,100 @@ router.patch('/:groupId/status', authenticateToken, authorizeRoles('FACULTY'), a
         recipientEmail: email
       }))
     });
+
+    // Send emails to all group members
+    for (const email of allMembers) {
+      if (status === 'APPROVED') {
+        const approvalContent = `
+          <p class="content">🎉 <strong>CONGRATULATIONS!</strong> 🎉</p>
+          <p class="content">Your group "${group.title}" has been approved by Prof. ${group.faculty.user.name}! Time to turn those ideas into reality!</p>
+          
+          <div class="info-box">
+            <div class="info-item">
+              <div class="info-label">Group Name</div>
+              <div class="info-value">${group.title}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Group ID</div>
+              <div class="info-value">${group.groupId}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Approved by</div>
+              <div class="info-value">Prof. ${group.faculty.user.name}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Project Type</div>
+              <div class="info-value">${group.projectType}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Status</div>
+              <div class="info-value">✅ ACTIVE & READY TO GO!</div>
+            </div>
+          </div>
+          
+          <span class="success-badge">🚀 Group Approved - Let's Build!</span>
+          
+          <p class="content">You can now collaborate with your team members and start developing your project. The sky's the limit! 🌟</p>
+          
+          <a href="#" class="cta-button">Start Working</a>
+          
+          <p class="content" style="margin-top: 30px; color: #059669; font-weight: bold;">
+            Pro tip: Great teamwork makes the dream work! 💪
+          </p>
+        `;
+
+        const approvalEmailHTML = global.createCAPSEmailTemplate(
+          'Group Approved! 🎉', 
+          approvalContent,
+          '#10B981'
+        );
+
+        await global.sendEmail(email, `🎉 Group Approved - ${group.title}`, approvalEmailHTML);
+      } else {
+        const rejectionContent = `
+          <p class="content">Hey team,</p>
+          <p class="content">We have an update about your group "${group.title}". While it hasn't been approved this time, don't worry - this is just a stepping stone to making it even better! 💪</p>
+          
+          <div class="info-box">
+            <div class="info-item">
+              <div class="info-label">Group Name</div>
+              <div class="info-value">${group.title}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Group ID</div>
+              <div class="info-value">${group.groupId}</div>
+            </div>
+            <div class="info-item">
+              <div class="info-label">Reviewed by</div>
+              <div class="info-value">Prof. ${group.faculty.user.name}</div>
+            </div>
+          </div>
+          
+          <div style="background-color: #FEF2F2; padding: 20px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #EF4444;">
+            <div class="info-label" style="color: #DC2626;">Feedback for Improvement</div>
+            <div style="color: #1F2937; font-weight: 600; margin-top: 10px; line-height: 1.6;">${rejectionReason}</div>
+          </div>
+          
+          <span class="error-badge">📝 Needs Improvement</span>
+          
+          <p class="content">Don't let this discourage you! Use this feedback to create an even better proposal. Every great project starts with iterations! 🌟</p>
+          
+          <a href="#" class="cta-button">Create New Group</a>
+          
+          <p class="content" style="margin-top: 30px; color: #7C3AED; font-weight: bold;">
+            Remember: The best projects come from the best preparations! 🎯
+          </p>
+        `;
+
+        const rejectionEmailHTML = global.createCAPSEmailTemplate(
+          'Group Feedback Received 📝', 
+          rejectionContent,
+          '#EF4444'
+        );
+
+        await global.sendEmail(email, `Group Feedback - ${group.title}`, rejectionEmailHTML);
+      }
+    }
 
     res.json({
       message: `Group ${status.toLowerCase()} successfully`,
@@ -828,6 +1058,8 @@ router.get('/admin/all', authenticateToken, authorizeRoles('ADMIN', 'FACULTY'), 
       projectType, 
       facultyId, 
       department,
+      semester,
+      teamSize,
       page = 1, 
       limit = 20,
       sortBy = 'createdAt',
@@ -866,7 +1098,8 @@ router.get('/admin/all', authenticateToken, authorizeRoles('ADMIN', 'FACULTY'), 
     const orderBy = {};
     orderBy[sortBy] = sortOrder;
 
-    const groups = await prisma.group.findMany({
+    // First, get all groups with member count
+    let groups = await prisma.group.findMany({
       where: whereClause,
       include: {
         members: {
@@ -883,20 +1116,38 @@ router.get('/admin/all', authenticateToken, authorizeRoles('ADMIN', 'FACULTY'), 
           include: { user: true }
         }
       },
-      skip: parseInt(skip),
-      take: parseInt(limit),
       orderBy
     });
 
-    const totalGroups = await prisma.group.count({ where: whereClause });
+    // Apply semester and team size filtering after fetching
+    if (semester && semester !== 'ALL') {
+      groups = groups.filter(group => 
+        group.members?.some(member => 
+          member.student?.semester?.toString() === semester
+        )
+      );
+    }
+
+    if (teamSize && teamSize !== 'ALL') {
+      const targetSize = parseInt(teamSize);
+      groups = groups.filter(group => 
+        group.members?.length === targetSize
+      );
+    }
+
+    // Apply pagination after filtering
+    const totalGroups = groups.length;
+    const startIndex = skip;
+    const endIndex = startIndex + parseInt(limit);
+    const paginatedGroups = groups.slice(startIndex, endIndex);
 
     res.json({
-      groups,
+      groups: paginatedGroups,
       pagination: {
         currentPage: parseInt(page),
         totalPages: Math.ceil(totalGroups / limit),
         totalGroups,
-        hasNext: page * limit < totalGroups,
+        hasNext: endIndex < totalGroups,
         hasPrev: page > 1
       }
     });
@@ -1222,6 +1473,222 @@ router.post('/:groupId/add-member', authenticateToken, authorizeRoles('STUDENT')
 
   } catch (error) {
     console.error('Add member to group error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// Get students without groups and send reminder emails (Admin only)
+router.post('/admin/send-group-reminder', authenticateToken, authorizeRoles('ADMIN'), async (req, res) => {
+  try {
+    const { 
+      semesters = [], 
+      deadline = '', 
+      customMessage = '',
+      departments = []
+    } = req.body;
+
+    // Build filter criteria
+    let whereClause = {
+      groupMember: null // Students not in any group
+    };
+
+    // Add semester filter if specified
+    if (semesters.length > 0) {
+      whereClause.semester = { in: semesters.map(s => parseInt(s)) };
+    }
+
+    // Add department filter if specified
+    if (departments.length > 0) {
+      whereClause.class = {
+        contains: departments.join('|') // This will need adjustment based on your class format
+      };
+    }
+
+    // Get students without groups
+    const studentsWithoutGroups = await prisma.student.findMany({
+      where: whereClause,
+      include: {
+        user: {
+          select: { id: true, name: true, email: true }
+        }
+      },
+      orderBy: [
+        { semester: 'asc' },
+        { class: 'asc' },
+        { user: { name: 'asc' } }
+      ]
+    });
+
+    if (studentsWithoutGroups.length === 0) {
+      return res.json({ 
+        message: 'No students found matching the criteria',
+        count: 0,
+        students: []
+      });
+    }
+
+    // Prepare email content
+    const deadlineText = deadline ? `\n\n⏰ **Important Deadline:** ${deadline}` : '';
+    const customText = customMessage ? `\n\n📝 **Additional Information:**\n${customMessage}` : '';
+
+    // Create email content for students
+    const studentEmailContent = `
+      <p class="content">Dear Student,</p>
+      <p class="content">📢 <strong>Important Reminder!</strong> We noticed that you haven't joined or created a project group yet.</p>
+      
+      <div class="info-box">
+        <div class="info-item">
+          <div class="info-label">What You Need to Do</div>
+          <div class="info-value">Join an existing group OR create a new group with your classmates</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Maximum Group Size</div>
+          <div class="info-value">4 students per group</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Project Types Available</div>
+          <div class="info-value">UDP (User Defined Project) or IDP (Industry Defined Project)</div>
+        </div>
+        ${deadline ? `
+          <div class="info-item">
+            <div class="info-label">⏰ Deadline</div>
+            <div class="info-value" style="color: #EF4444; font-weight: 900;">${deadline}</div>
+          </div>
+        ` : ''}
+      </div>
+      
+      ${customMessage ? `
+        <div style="background-color: #FEF3C7; padding: 15px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #F59E0B;">
+          <div class="info-label">📝 Additional Information</div>
+          <div style="color: #1F2937; font-weight: 600; margin-top: 5px; white-space: pre-line;">${customMessage}</div>
+        </div>
+      ` : ''}
+      
+      <span class="warning-badge">⚠️ Action Required - Create or Join Group</span>
+      
+      <p class="content">Don't miss out on this collaborative learning experience! Log in to CAPS now to create your group or join an existing one. 🚀</p>
+      
+      <a href="#" class="cta-button">Access CAPS Now</a>
+      
+      <p class="content" style="margin-top: 30px; color: #7C3AED; font-weight: bold;">
+        Need help? Contact your faculty or the CAPS support team! 💪
+      </p>
+    `;
+
+    // Send emails to all students
+    const emailPromises = studentsWithoutGroups.map(async (student) => {
+      const emailHTML = global.createCAPSEmailTemplate(
+        'Group Formation Reminder! 📋', 
+        studentEmailContent,
+        '#F59E0B'
+      );
+
+      return global.sendEmail(
+        student.user.email, 
+        `Group Formation Reminder${deadline ? ` - Deadline: ${deadline}` : ''}`, 
+        emailHTML
+      );
+    });
+
+    // Send all emails
+    await Promise.all(emailPromises);
+
+    // Create notifications in the system
+    await prisma.notification.createMany({
+      data: studentsWithoutGroups.map(student => ({
+        title: 'Group Formation Reminder',
+        message: `You haven't joined or created a project group yet. Please create a group or join an existing one.${deadlineText}${customText}`,
+        type: 'GROUP_REMINDER',
+        recipientEmail: student.user.email
+      }))
+    });
+
+    res.json({
+      message: `Reminder emails sent successfully to ${studentsWithoutGroups.length} students`,
+      count: studentsWithoutGroups.length,
+      students: studentsWithoutGroups.map(s => ({
+        id: s.id,
+        name: s.user.name,
+        email: s.user.email,
+        semester: s.semester,
+        class: s.class,
+        division: s.division
+      }))
+    });
+
+  } catch (error) {
+    console.error('Send group reminder error:', error);
+    res.status(500).json({ message: 'Server error while sending reminder emails' });
+  }
+});
+
+// Get students without groups for preview (Admin only)
+router.get('/admin/students-without-groups', authenticateToken, authorizeRoles('ADMIN'), async (req, res) => {
+  try {
+    const { semesters, departments } = req.query;
+
+    let whereClause = {
+      groupMember: null // Students not in any group
+    };
+
+    // Add filters if specified
+    if (semesters) {
+      const semesterArray = semesters.split(',').map(s => parseInt(s.trim()));
+      whereClause.semester = { in: semesterArray };
+    }
+
+    if (departments) {
+      const deptArray = departments.split(',');
+      whereClause.OR = deptArray.map(dept => ({
+        class: { contains: dept.trim() }
+      }));
+    }
+
+    const studentsWithoutGroups = await prisma.student.findMany({
+      where: whereClause,
+      include: {
+        user: {
+          select: { id: true, name: true, email: true }
+        }
+      },
+      orderBy: [
+        { semester: 'asc' },
+        { class: 'asc' },
+        { user: { name: 'asc' } }
+      ]
+    });
+
+    // Group by semester for better organization
+    const groupedBySemester = studentsWithoutGroups.reduce((acc, student) => {
+      const sem = student.semester;
+      if (!acc[sem]) acc[sem] = [];
+      acc[sem].push({
+        id: student.id,
+        name: student.user.name,
+        email: student.user.email,
+        enrollmentNo: student.enrollmentNo,
+        class: student.class,
+        division: student.division
+      });
+      return acc;
+    }, {});
+
+    res.json({
+      totalCount: studentsWithoutGroups.length,
+      byDepartment: groupedBySemester,
+      students: studentsWithoutGroups.map(s => ({
+        id: s.id,
+        name: s.user.name,
+        email: s.user.email,
+        semester: s.semester,
+        enrollmentNo: s.enrollmentNo,
+        class: s.class,
+        division: s.division
+      }))
+    });
+
+  } catch (error) {
+    console.error('Get students without groups error:', error);
     res.status(500).json({ message: 'Server error' });
   }
 });

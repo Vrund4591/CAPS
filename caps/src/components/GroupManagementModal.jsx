@@ -13,7 +13,10 @@ import {
   RefreshCw,
   Download,
   Calendar,
-  User
+  User,
+  Mail,
+  Send,
+  UserX
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
 
@@ -27,15 +30,23 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
   const [semesterFilter, setSemesterFilter] = useState('ALL');
   const [teamSizeFilter, setTeamSizeFilter] = useState('ALL');
   const [academicYearFilter, setAcademicYearFilter] = useState('ALL');
-  const [frontendTechFilter, setFrontendTechFilter] = useState('ALL');
-  const [backendTechFilter, setBackendTechFilter] = useState('ALL');
-  const [creationDateFilter, setCreationDateFilter] = useState('ALL');
   const [currentPage, setCurrentPage] = useState(1);
   const [pagination, setPagination] = useState({});
   const [sortBy, setSortBy] = useState('createdAt');
   const [sortOrder, setSortOrder] = useState('desc');
   const [selectedGroup, setSelectedGroup] = useState(null);
   const [showGroupDetails, setShowGroupDetails] = useState(false);
+  const [showReminderModal, setShowReminderModal] = useState(false);
+  const [reminderData, setReminderData] = useState({
+    semesters: [],
+    departments: [],
+    deadline: '',
+    customMessage: ''
+  });
+  const [studentsWithoutGroups, setStudentsWithoutGroups] = useState([]);
+  const [reminderLoading, setReminderLoading] = useState(false);
+  const [previewLoading, setPreviewLoading] = useState(false);
+  const [showEmailPreview, setShowEmailPreview] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -51,10 +62,6 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
     semesterFilter, 
     teamSizeFilter, 
     academicYearFilter, 
-    frontendTechFilter, 
-    backendTechFilter, 
-    creationDateFilter, 
-    searchTerm, 
     sortBy, 
     sortOrder
   ]);
@@ -73,9 +80,6 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
   const handleSemesterFilterChange = handleFilterChange(setSemesterFilter);
   const handleTeamSizeFilterChange = handleFilterChange(setTeamSizeFilter);
   const handleAcademicYearFilterChange = handleFilterChange(setAcademicYearFilter);
-  const handleFrontendTechFilterChange = handleFilterChange(setFrontendTechFilter);
-  const handleBackendTechFilterChange = handleFilterChange(setBackendTechFilter);
-  const handleCreationDateFilterChange = handleFilterChange(setCreationDateFilter);
 
   const handleSearchChange = (e) => {
     setSearchTerm(e.target.value);
@@ -101,10 +105,6 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
         department: departmentFilter !== 'ALL' ? departmentFilter : '',
         semester: semesterFilter !== 'ALL' ? semesterFilter : '',
         teamSize: teamSizeFilter !== 'ALL' ? teamSizeFilter : '',
-        academicYear: academicYearFilter !== 'ALL' ? academicYearFilter : '',
-        frontendTech: frontendTechFilter !== 'ALL' ? frontendTechFilter : '',
-        backendTech: backendTechFilter !== 'ALL' ? backendTechFilter : '',
-        creationDate: creationDateFilter !== 'ALL' ? creationDateFilter : '',
         search: searchTerm,
         sortBy,
         sortOrder
@@ -144,7 +144,6 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
             const matchesStatus = statusFilter === 'ALL' || group.status === statusFilter;
             const matchesProjectType = projectTypeFilter === 'ALL' || group.projectType === projectTypeFilter;
             
-            // Fix department filtering - check both faculty department and student classes
             const matchesDepartment = departmentFilter === 'ALL' || 
               group.faculty?.department === departmentFilter ||
               group.members?.some(member => {
@@ -161,14 +160,8 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
             const matchesTeamSize = teamSizeFilter === 'ALL' || 
               group.members?.length?.toString() === teamSizeFilter;
             
-            const matchesFrontendTech = frontendTechFilter === 'ALL' || 
-              (group.frontendTech && group.frontendTech.toLowerCase().includes(frontendTechFilter.toLowerCase()));
-            
-            const matchesBackendTech = backendTechFilter === 'ALL' || 
-              (group.backendTech && group.backendTech.toLowerCase().includes(backendTechFilter.toLowerCase()));
-            
             return matchesSearch && matchesStatus && matchesProjectType && matchesDepartment &&
-                   matchesSemester && matchesTeamSize && matchesFrontendTech && matchesBackendTech;
+                   matchesSemester && matchesTeamSize;
           });
           
           setGroups(filteredGroups);
@@ -233,10 +226,163 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
     setSemesterFilter('ALL');
     setTeamSizeFilter('ALL');
     setAcademicYearFilter('ALL');
-    setFrontendTechFilter('ALL');
-    setBackendTechFilter('ALL');
-    setCreationDateFilter('ALL');
     setSearchTerm('');
+  };
+
+  const fetchStudentsWithoutGroups = async () => {
+    setPreviewLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const params = new URLSearchParams();
+      
+      if (reminderData.semesters.length > 0) {
+        params.append('semesters', reminderData.semesters.join(','));
+      }
+      if (reminderData.departments.length > 0) {
+        params.append('departments', reminderData.departments.join(','));
+      }
+
+      const response = await fetch(`http://localhost:5001/api/groups/admin/students-without-groups?${params}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        setStudentsWithoutGroups(data.students || []);
+      }
+    } catch (error) {
+      console.error('Fetch students without groups error:', error);
+    }
+    setPreviewLoading(false);
+  };
+
+  const sendGroupReminder = async () => {
+    setReminderLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const response = await fetch('http://localhost:5001/api/groups/admin/send-group-reminder', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(reminderData)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        toast.success('Reminders Sent!', `Successfully sent reminder emails to ${data.count} students`);
+        setShowReminderModal(false);
+        setReminderData({
+          semesters: [],
+          departments: [],
+          deadline: '',
+          customMessage: ''
+        });
+      } else {
+        const errorData = await response.json();
+        toast.error('Send Failed', errorData.message || 'Failed to send reminder emails');
+      }
+    } catch (error) {
+      console.error('Send reminder error:', error);
+      toast.error('Network Error', 'Please check your connection and try again.');
+    }
+    setReminderLoading(false);
+  };
+
+  const handleReminderDataChange = (field, value) => {
+    setReminderData(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const toggleSemester = (semester) => {
+    setReminderData(prev => ({
+      ...prev,
+      semesters: prev.semesters.includes(semester)
+        ? prev.semesters.filter(s => s !== semester)
+        : [...prev.semesters, semester]
+    }));
+  };
+
+  const toggleDepartment = (department) => {
+    setReminderData(prev => ({
+      ...prev,
+      departments: prev.departments.includes(department)
+        ? prev.departments.filter(d => d !== department)
+        : [...prev.departments, department]
+    }));
+  };
+
+  const generateEmailPreview = () => {
+    const deadlineText = reminderData.deadline ? `\n\n⏰ **Important Deadline:** ${reminderData.deadline}` : '';
+    const customText = reminderData.customMessage ? `\n\n📝 **Additional Information:**\n${reminderData.customMessage}` : '';
+
+    return `
+      <div style="font-family: 'Inter', Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #FFFFF4; padding: 20px;">
+        <div style="background-color: #F59E0B; padding: 30px 20px; border-radius: 20px 20px 0 0; border: 4px solid #000; border-bottom: none; text-align: center; position: relative;">
+          <div style="position: absolute; top: 15px; right: 15px; width: 20px; height: 20px; background-color: #FFD700; border-radius: 50%; border: 3px solid #000;"></div>
+          <div style="position: absolute; bottom: 15px; left: 15px; width: 15px; height: 15px; background-color: #FF6B6B; border-radius: 3px; border: 3px solid #000;"></div>
+          <h1 style="color: white; font-size: 36px; font-weight: 900; margin: 0; text-shadow: 3px 3px 0px #000;">CAPS</h1>
+          <p style="color: #FFFFF4; font-size: 12px; font-weight: 800; margin: 5px 0 0 0; letter-spacing: 2px; text-transform: uppercase;">COLLABORATIVE ASSIGNMENT & PROJECT SYSTEM</p>
+        </div>
+        
+        <div style="background-color: white; padding: 30px; border: 4px solid #000; border-top: none; border-bottom: none;">
+          <h2 style="color: #F59E0B; font-size: 24px; font-weight: 900; margin: 0 0 20px 0; text-align: center;">Group Formation Reminder! 📋</h2>
+          
+          <p style="color: #1F2937; font-size: 16px; font-weight: 500; margin-bottom: 20px;">Dear Student,</p>
+          <p style="color: #1F2937; font-size: 16px; font-weight: 500, margin-bottom: 20px;">📢 <strong>Important Reminder!</strong> We noticed that you haven't joined or created a project group yet.</p>
+          
+          <div style="background-color: #FFFFF4; border: 3px solid #000; border-radius: 15px; padding: 20px; margin: 20px 0;">
+            <div style="margin: 8px 0; font-weight: 600;">
+              <div style="color: #6B7280; font-weight: 800; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">What You Need to Do</div>
+              <div style="color: #1F2937; font-weight: 700; font-size: 16px;">Join an existing group OR create a new group with your classmates</div>
+            </div>
+            <div style="margin: 8px 0; font-weight: 600;">
+              <div style="color: #6B7280; font-weight: 800; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Maximum Group Size</div>
+              <div style="color: #1F2937; font-weight: 700; font-size: 16px;">4 students per group</div>
+            </div>
+            <div style="margin: 8px 0; font-weight: 600;">
+              <div style="color: #6B7280; font-weight: 800; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">Project Types Available</div>
+              <div style="color: #1F2937; font-weight: 700; font-size: 16px;">UDP (User Defined Project) or IDP (Industry Defined Project)</div>
+            </div>
+            ${reminderData.deadline ? `
+              <div style="margin: 8px 0; font-weight: 600;">
+                <div style="color: #6B7280; font-weight: 800; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">⏰ Deadline</div>
+                <div style="color: #EF4444; font-weight: 900; font-size: 16px;">${reminderData.deadline}</div>
+              </div>
+            ` : ''}
+          </div>
+          
+          ${reminderData.customMessage ? `
+            <div style="background-color: #FEF3C7; padding: 15px; border-radius: 10px; margin: 20px 0; border-left: 4px solid #F59E0B;">
+              <div style="color: #6B7280; font-weight: 800; text-transform: uppercase; font-size: 12px; letter-spacing: 1px;">📝 Additional Information</div>
+              <div style="color: #1F2937; font-weight: 600; margin-top: 5px; white-space: pre-line;">${reminderData.customMessage}</div>
+            </div>
+          ` : ''}
+          
+          <div style="background-color: #F59E0B; color: white; padding: 8px 16px; border-radius: 20px; border: 3px solid #000; font-weight: 900; font-size: 14px; display: inline-block; margin: 10px 0;">⚠️ Action Required - Create or Join Group</div>
+          
+          <p style="color: #1F2937; font-size: 16px; font-weight: 500, margin-bottom: 20px;">Don't miss out on this collaborative learning experience! Log in to CAPS now to create your group or join an existing one. 🚀</p>
+          
+          <div style="text-align: center; margin: 20px 0;">
+            <a href="#" style="display: inline-block; background-color: #F59E0B; color: white; text-decoration: none; padding: 15px 30px; border-radius: 15px; border: 4px solid #000; font-weight: 900; font-size: 16px; text-transform: uppercase; letter-spacing: 1px; box-shadow: 6px 6px 0px #000;">Access CAPS Now</a>
+          </div>
+          
+          <p style="color: #7C3AED; font-weight: bold; margin-top: 30px;">Need help? Contact your faculty or the CAPS support team! 💪</p>
+        </div>
+        
+        <div style="background-color: #1F2937; color: white; padding: 25px; text-align: center; border: 4px solid #000; border-radius: 0 0 20px 20px; border-top: none;">
+          <div style="position: relative;">
+            <div style="position: absolute; top: -15px; left: 50%; transform: translateX(-50%); width: 40px; height: 4px; background-color: #F59E0B; border-radius: 2px;"></div>
+            <p style="font-size: 12px; font-weight: 600; margin: 0; opacity: 0.8;">
+              This is an automated notification from the CAPS system.<br>
+              © CAPS - Making collaboration awesome! 🚀
+            </p>
+          </div>
+        </div>
+      `;
   };
 
   if (!isOpen) return null;
@@ -257,6 +403,14 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
               </p>
             </div>
             <div className="flex items-center space-x-3">
+              <button
+                onClick={() => setShowReminderModal(true)}
+                className="bg-orange-500 hover:bg-orange-600 text-white p-2 rounded-2xl transition-colors flex items-center gap-2 px-4"
+                title="Send Group Formation Reminders"
+              >
+                <UserX className="w-5 h-5" />
+                <span className="font-bold">Send Reminders</span>
+              </button>
               <button
                 onClick={fetchGroups}
                 className="bg-purple-500 hover:bg-purple-600 text-white p-2 rounded-2xl transition-colors"
@@ -322,6 +476,17 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
             </select>
 
             <select
+              value={semesterFilter}
+              onChange={(e) => handleSemesterFilterChange(e.target.value)}
+              className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
+            >
+              <option value="ALL">All Semesters</option>
+              {[1,2,3,4,5,6,7,8].map(sem => (
+                <option key={sem} value={sem}>Semester {sem}</option>
+              ))}
+            </select>
+
+            <select
               value={`${sortBy}-${sortOrder}`}
               onChange={handleSortChange}
               className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
@@ -333,29 +498,10 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
               <option value="status-asc">Status A-Z</option>
               <option value="status-desc">Status Z-A</option>
             </select>
-
-            <button
-              onClick={() => {/* Export functionality */}}
-              className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-xl transition-colors flex items-center gap-2"
-            >
-              <Download className="w-4 h-4" />
-              Export
-            </button>
           </div>
 
-          {/* Additional Advanced Filters */}
+          {/* Second row with remaining filters */}
           <div className="grid lg:grid-cols-4 gap-4 mb-4">
-            <select
-              value={semesterFilter}
-              onChange={(e) => handleSemesterFilterChange(e.target.value)}
-              className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
-            >
-              <option value="ALL">All Semesters</option>
-              {[1,2,3,4,5,6,7,8].map(sem => (
-                <option key={sem} value={sem}>Semester {sem}</option>
-              ))}
-            </select>
-
             <select
               value={teamSizeFilter}
               onChange={(e) => handleTeamSizeFilterChange(e.target.value)}
@@ -380,58 +526,13 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
               <option value="2021-22">2021-22</option>
             </select>
 
-            <select
-              value={creationDateFilter}
-              onChange={(e) => handleCreationDateFilterChange(e.target.value)}
-              className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
+            <button
+              onClick={() => {/* Export functionality */}}
+              className="bg-green-500 hover:bg-green-600 text-white font-bold py-2 px-4 rounded-xl transition-colors flex items-center gap-2"
             >
-              <option value="ALL">All Creation Dates</option>
-              <option value="today">Today</option>
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-              <option value="year">This Year</option>
-            </select>
-          </div>
-
-          {/* Technology Stack Filters */}
-          <div className="grid lg:grid-cols-4 gap-4">
-            <select
-              value={frontendTechFilter}
-              onChange={(e) => handleFrontendTechFilterChange(e.target.value)}
-              className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
-            >
-              <option value="ALL">All Frontend Tech</option>
-              <option value="React">React</option>
-              <option value="Angular">Angular</option>
-              <option value="Vue">Vue.js</option>
-              <option value="HTML">HTML/CSS/JS</option>
-              <option value="Flutter">Flutter</option>
-            </select>
-
-            <select
-              value={backendTechFilter}
-              onChange={(e) => handleBackendTechFilterChange(e.target.value)}
-              className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
-            >
-              <option value="ALL">All Backend Tech</option>
-              <option value="Node">Node.js</option>
-              <option value="Python">Python</option>
-              <option value="Java">Java</option>
-              <option value="PHP">PHP</option>
-              <option value="C#">C#/.NET</option>
-            </select>
-
-            <select
-              value={creationDateFilter}
-              onChange={(e) => handleCreationDateFilterChange(e.target.value)}
-              className="px-4 py-2 border-2 border-gray-300 rounded-xl focus:border-purple-500 focus:outline-none font-semibold"
-            >
-              <option value="ALL">All Creation Dates</option>
-              <option value="today">Today</option>
-              <option value="week">This Week</option>
-              <option value="month">This Month</option>
-              <option value="year">This Year</option>
-            </select>
+              <Download className="w-4 h-4" />
+              Export
+            </button>
 
             <button
               onClick={handleClearAllFilters}
@@ -597,6 +698,321 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
         </div>
       </div>
 
+      {/* Group Reminder Modal */}
+      {showReminderModal && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60 p-4">
+          <div className="bg-white p-8 rounded-3xl shadow-2xl border-4 border-black max-w-6xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center mb-6">
+              <h3 className="text-2xl font-black text-gray-900 flex items-center gap-2">
+                <UserX className="w-6 h-6 text-orange-600" />
+                Send Group Formation Reminders
+              </h3>
+              <button
+                onClick={() => setShowReminderModal(false)}
+                className="bg-gray-500 hover:bg-gray-600 text-white p-2 rounded-2xl"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            <div className="grid gap-6">
+              {/* Filter Options */}
+              <div className="space-y-6">
+                <div className="bg-blue-50 p-4 rounded-2xl border-2 border-blue-300">
+                  <h4 className="font-bold text-blue-900 mb-3">Target Students</h4>
+                  
+                  {/* Semester Selection */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      Select Semesters (leave empty for all)
+                    </label>
+                    <div className="grid grid-cols-4 gap-2">
+                      {[1,2,3,4,5,6,7,8].map(sem => (
+                        <button
+                          key={sem}
+                          type="button"
+                          onClick={() => toggleSemester(sem)}
+                          className={`p-2 rounded-xl border-2 font-bold text-sm transition-colors ${
+                            reminderData.semesters.includes(sem)
+                              ? 'bg-blue-500 border-blue-600 text-white'
+                              : 'bg-white border-gray-300 text-gray-700 hover:border-blue-400'
+                          }`}
+                        >
+                          Sem {sem}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Department Selection */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      Select Departments (leave empty for all)
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {['IT', 'CE', 'MECH', 'CIVIL', 'ENTC'].map(dept => (
+                        <button
+                          key={dept}
+                          type="button"
+                          onClick={() => toggleDepartment(dept)}
+                          className={`p-2 rounded-xl border-2 font-bold text-sm transition-colors ${
+                            reminderData.departments.includes(dept)
+                              ? 'bg-green-500 border-green-600 text-white'
+                              : 'bg-white border-gray-300 text-gray-700 hover:border-green-400'
+                          }`}
+                        >
+                          {dept}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={fetchStudentsWithoutGroups}
+                    disabled={previewLoading}
+                    className="w-full bg-purple-500 hover:bg-purple-600 text-white font-bold py-2 px-4 rounded-xl transition-colors disabled:opacity-50"
+                  >
+                    {previewLoading ? 'Loading...' : 'Preview Target Students'}
+                  </button>
+                </div>
+
+                {/* Message Options */}
+                <div className="bg-yellow-50 p-4 rounded-2xl border-2 border-yellow-300">
+                  <h4 className="font-bold text-yellow-900 mb-3">Message Details</h4>
+                  
+                  <div className="mb-4">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      Deadline (optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={reminderData.deadline}
+                      onChange={(e) => handleReminderDataChange('deadline', e.target.value)}
+                      className="w-full p-3 border-2 border-gray-300 rounded-xl focus:border-yellow-500 focus:outline-none font-semibold"
+                      placeholder="e.g., December 15, 2024 at 11:59 PM"
+                    />
+                  </div>
+
+                  <div className="mb-4">
+                    <label className="block text-sm font-bold text-gray-700 mb-2">
+                      Custom Message (optional)
+                    </label>
+                    <textarea
+                      value={reminderData.customMessage}
+                      onChange={(e) => handleReminderDataChange('customMessage', e.target.value)}
+                      rows="4"
+                      className="w-full p-3 border-2 border-gray-300 rounded-xl focus:border-yellow-500 focus:outline-none font-semibold"
+                      placeholder="Add any additional instructions or information for students..."
+                    />
+                  </div>
+
+                  {/* Email Preview Button */}
+                  <button
+                    onClick={() => setShowEmailPreview(true)}
+                    className="w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-2 px-4 rounded-xl transition-colors flex items-center justify-center gap-2"
+                  >
+                    <Eye className="w-4 h-4" />
+                    Preview Email
+                  </button>
+                </div>
+              </div>
+
+              {/* Preview Students - Only show when there are students or loading */}
+              {(studentsWithoutGroups.length > 0 || previewLoading || (reminderData.semesters.length > 0 || reminderData.departments.length > 0)) && (
+                <div className="bg-gray-50 p-4 rounded-2xl border-2 border-gray-300">
+                  <h4 className="font-bold text-gray-900 mb-3">
+                    Students Without Groups ({studentsWithoutGroups.length})
+                  </h4>
+                  
+                  {previewLoading ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin w-6 h-6 border-2 border-purple-500 border-t-transparent rounded-full mx-auto"></div>
+                      <p className="text-sm text-gray-600 mt-2">Loading students...</p>
+                    </div>
+                  ) : studentsWithoutGroups.length > 0 ? (
+                    <div className="space-y-2" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                      {studentsWithoutGroups.map((student) => (
+                        <div key={student.id} className="bg-white p-3 rounded-xl border border-gray-200">
+                          <div className="font-bold text-sm">{student.name}</div>
+                          <div className="text-xs text-gray-600">{student.enrollmentNo}</div>
+                          <div className="text-xs text-gray-600">
+                            Sem {student.semester} | {student.class}-{student.division}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div className="text-center py-6 text-gray-500">
+                      <UserX className="w-8 h-8 mx-auto mb-2" />
+                      <p className="text-sm font-semibold">
+                        {reminderData.semesters.length > 0 || reminderData.departments.length > 0
+                          ? 'No students found matching the criteria'
+                          : 'Click "Preview Target Students" to see who will receive reminders'
+                        }
+                      </p>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Action Buttons */}
+            <div className="flex justify-between items-center mt-6 pt-6 border-t-2 border-gray-300">
+              <div className="text-sm text-gray-600">
+                {studentsWithoutGroups.length > 0 && (
+                  <p className="font-semibold">
+                    Ready to send reminders to {studentsWithoutGroups.length} students
+                  </p>
+                )}
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowReminderModal(false)}
+                  className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-2xl border-2 border-black transition-all duration-200"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={sendGroupReminder}
+                  disabled={reminderLoading || studentsWithoutGroups.length === 0}
+                  className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <Send className="w-4 h-4" />
+                  {reminderLoading ? 'Sending...' : `Send Reminders (${studentsWithoutGroups.length})`}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Email Preview Modal */}
+      {showEmailPreview && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-70 p-4">
+          <div className="bg-white rounded-3xl shadow-2xl border-4 border-black max-w-4xl w-full max-h-[90vh] overflow-hidden">
+            {/* Header */}
+            <div className="bg-indigo-50 p-6 border-b-3 border-indigo-500">
+              <div className="flex justify-between items-center">
+                <div>
+                  <h3 className="text-2xl font-black text-gray-900 flex items-center gap-2">
+                    <Eye className="w-6 h-6 text-indigo-600" />
+                    Email Preview
+                  </h3>
+                  <p className="text-indigo-700 font-semibold mt-1">
+                    This is how the reminder email will look to students
+                  </p>
+                </div>
+                <button
+                  onClick={() => setShowEmailPreview(false)}
+                  className="bg-gray-500 hover:bg-gray-600 text-white p-2 rounded-2xl transition-colors"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Email Preview Content */}
+            <div className="p-6 max-h-[calc(90vh-200px)] overflow-y-auto">
+              <div className="bg-gray-100 p-4 rounded-xl border-2 border-gray-300 mb-4">
+                <div className="flex items-center justify-between mb-2">
+                  <h4 className="font-bold text-gray-800">Email Subject:</h4>
+                  <span className="text-sm bg-blue-100 text-blue-800 px-2 py-1 rounded-full font-bold">
+                    System Generated
+                  </span>
+                </div>
+                <p className="text-gray-700 font-semibold">
+                  🎯 Group Formation Reminder{reminderData.deadline ? ` - Deadline: ${reminderData.deadline}` : ''}
+                </p>
+              </div>
+
+              <div className="bg-white border-2 border-gray-300 rounded-xl overflow-hidden">
+                <div className="bg-gray-50 p-3 border-b border-gray-300">
+                  <div className="flex items-center gap-2 text-sm text-gray-600">
+                    <Mail className="w-4 h-4" />
+                    <span className="font-bold">From:</span> CAPS System 🎓 &lt;noreply@caps.edu&gt;
+                  </div>
+                  <div className="flex items-center gap-2 text-sm text-gray-600 mt-1">
+                    <Users className="w-4 h-4" />
+                    <span className="font-bold">To:</span> {studentsWithoutGroups.length} students without groups
+                  </div>
+                </div>
+                
+                <div 
+                  className="p-4 overflow-x-auto"
+                  dangerouslySetInnerHTML={{ __html: generateEmailPreview() }}
+                />
+              </div>
+
+              {/* Email Stats */}
+              <div className="mt-6 grid md:grid-cols-3 gap-4">
+                <div className="bg-blue-50 p-4 rounded-xl border-2 border-blue-300 text-center">
+                  <div className="text-2xl font-black text-blue-800">{studentsWithoutGroups.length}</div>
+                  <div className="text-blue-700 font-bold text-sm">Recipients</div>
+                </div>
+                <div className="bg-green-50 p-4 rounded-xl border-2 border-green-300 text-center">
+                  <div className="text-2xl font-black text-green-800">
+                    {reminderData.semesters.length > 0 ? reminderData.semesters.length : 'All'}
+                  </div>
+                  <div className="text-green-700 font-bold text-sm">Semesters</div>
+                </div>
+                <div className="bg-purple-50 p-4 rounded-xl border-2 border-purple-300 text-center">
+                  <div className="text-2xl font-black text-purple-800">
+                    {reminderData.departments.length > 0 ? reminderData.departments.length : 'All'}
+                  </div>
+                  <div className="text-purple-700 font-bold text-sm">Departments</div>
+                </div>
+              </div>
+
+              {/* Preview Info */}
+              <div className="mt-4 p-4 bg-yellow-50 rounded-xl border-2 border-yellow-300">
+                <div className="flex items-start gap-2">
+                  <AlertCircle className="w-5 h-5 text-yellow-600 mt-0.5 flex-shrink-0" />
+                  <div className="text-yellow-800 text-sm">
+                    <p className="font-bold mb-2">Email Preview Notes:</p>
+                    <ul className="space-y-1 text-xs">
+                      <li>• This preview shows the actual HTML email that will be sent</li>
+                      <li>• The CAPS branding and styling will be preserved</li>
+                      <li>• Each student will receive a personalized copy</li>
+                      <li>• Links and buttons in the actual email will be functional</li>
+                      {reminderData.deadline && <li>• Deadline information is prominently displayed</li>}
+                      {reminderData.customMessage && <li>• Your custom message is included in the email body</li>}
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Preview Modal Footer */}
+            <div className="bg-gray-50 p-6 border-t-2 border-gray-300 flex justify-between items-center">
+              <div className="text-sm text-gray-600">
+                <p className="font-semibold">
+                  Ready to send to {studentsWithoutGroups.length} students
+                </p>
+              </div>
+              <div className="flex space-x-3">
+                <button
+                  onClick={() => setShowEmailPreview(false)}
+                  className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-2xl border-2 border-black transition-all duration-200"
+                >
+                  Close Preview
+                </button>
+                <button
+                  onClick={() => {
+                    setShowEmailPreview(false);
+                    sendGroupReminder();
+                  }}
+                  disabled={reminderLoading || studentsWithoutGroups.length === 0}
+                  className="bg-orange-500 hover:bg-orange-600 text-white font-bold py-2 px-4 rounded-2xl border-3 border-black transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  <Send className="w-4 h-4" />
+                  {reminderLoading ? 'Sending...' : 'Send Now'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Group Details Modal */}
       {showGroupDetails && selectedGroup && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-60 p-4">
@@ -686,3 +1102,4 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
 };
 
 export default GroupManagementModal;
+          

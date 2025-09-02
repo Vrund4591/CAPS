@@ -73,25 +73,79 @@ router.post('/authorize', authenticateToken, authorizeRoles('ADMIN'), async (req
       });
     }
 
-    // Create authorization data
-    const authData = { email, role };
-    
-    // Add role-specific data
-    if (role === 'STUDENT') {
-      if (userClass) authData.class = userClass;
-      if (semester) authData.semester = parseInt(semester);
-      if (division) authData.division = division;
-    } else if (role === 'FACULTY') {
-      if (department) authData.department = department;
-    }
-
+    // Create authorization data - only store email and role
     const authorizedUser = await prisma.authorizedUser.create({
-      data: authData
+      data: { email, role }
     });
+
+    // Send authorization email with the additional info in the email content
+    const authContent = `
+      <p class="content">Hello there! 👋</p>
+      <p class="content">🎉 <strong>Great news!</strong> You've been authorized to join the CAPS family! Get ready for an amazing collaborative experience!</p>
+      
+      <div class="info-box">
+        <div class="info-item">
+          <div class="info-label">Email Address</div>
+          <div class="info-value">${email}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Authorized Role</div>
+          <div class="info-value">${role}</div>
+        </div>
+        ${role === 'STUDENT' && userClass ? `
+          <div class="info-item">
+            <div class="info-label">Class</div>
+            <div class="info-value">${userClass}</div>
+          </div>
+        ` : ''}
+        ${role === 'STUDENT' && semester ? `
+          <div class="info-item">
+            <div class="info-label">Semester</div>
+            <div class="info-value">${semester}</div>
+          </div>
+        ` : ''}
+        ${role === 'STUDENT' && division ? `
+          <div class="info-item">
+            <div class="info-label">Division</div>
+            <div class="info-value">${division}</div>
+          </div>
+        ` : ''}
+        ${role === 'FACULTY' && department ? `
+          <div class="info-item">
+            <div class="info-label">Department</div>
+            <div class="info-value">${department}</div>
+          </div>
+        ` : ''}
+      </div>
+      
+      <span class="success-badge">✅ Authorization Complete!</span>
+      
+      <p class="content">You can now register for the CAPS system using this email address. During registration, you'll need to provide your ${role === 'STUDENT' ? 'enrollment details' : role === 'FACULTY' ? 'department information' : 'profile information'}. Complete your registration to access the platform and start your collaborative journey! 🚀</p>
+      
+      <a href="#" class="cta-button">Complete Registration</a>
+      
+      <p class="content" style="margin-top: 30px; color: #7C3AED; font-weight: bold;">
+        Welcome to the future of collaborative learning! 🌟
+      </p>
+    `;
+
+    const authEmailHTML = global.createCAPSEmailTemplate(
+      'You\'re Authorized for CAPS! 🎓', 
+      authContent,
+      '#10B981'
+    );
+
+    await global.sendEmail(email, 'CAPS System Authorization - You\'re In!', authEmailHTML);
 
     res.status(201).json({
       message: `User ${email} has been authorized to register as ${role}`,
-      authorizedUser
+      authorizedUser,
+      additionalInfo: {
+        class: userClass,
+        semester,
+        division,
+        department
+      }
     });
   } catch (error) {
     console.error('Authorize user error:', error);
@@ -545,6 +599,49 @@ router.post('/create', authenticateToken, authorizeRoles('ADMIN'), async (req, r
       });
     });
 
+    // Send account creation email
+    const creationContent = `
+      <p class="content">Hello ${name}! 👋</p>
+      <p class="content">🎉 <strong>Welcome to CAPS!</strong> An administrator has created an account for you in our awesome collaboration system!</p>
+      
+      <div class="info-box">
+        <div class="info-item">
+          <div class="info-label">Name</div>
+          <div class="info-value">${name}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Email</div>
+          <div class="info-value">${email}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Role</div>
+          <div class="info-value">${role}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Account Status</div>
+          <div class="info-value">✅ Active & Ready</div>
+        </div>
+      </div>
+      
+      <span class="warning-badge">🔐 Security Alert</span>
+      
+      <p class="content"><strong>Important:</strong> Please contact your administrator to get your temporary password, then log in and change it immediately for security! 🛡️</p>
+      
+      <a href="#" class="cta-button">Login to CAPS</a>
+      
+      <p class="content" style="margin-top: 30px; color: #3B82F6; font-weight: bold;">
+        Your collaborative journey starts now! 🚀
+      </p>
+    `;
+
+    const creationEmailHTML = global.createCAPSEmailTemplate(
+      'Your CAPS Account is Ready! 🎯', 
+      creationContent,
+      '#3B82F6'
+    );
+
+    await global.sendEmail(email, 'CAPS Account Created - Welcome to the Team!', creationEmailHTML);
+
     res.status(201).json({
       message: 'User created successfully',
       user: newUser
@@ -695,4 +792,5 @@ router.post('/bulk-action', authenticateToken, authorizeRoles('ADMIN'), async (r
     res.status(500).json({ message: 'Server error' });
   }
 });
+
 module.exports = router;
