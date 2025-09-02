@@ -19,6 +19,8 @@ const generateGroupId = async () => {
 // Get available students for team selection
 router.get('/available-students', authenticateToken, authorizeRoles('STUDENT'), async (req, res) => {
   try {
+    const { includeSameSemesterOnly = 'true' } = req.query;
+    
     // Enhanced user validation with better error handling
     if (!req.user) {
       return res.status(401).json({ message: 'User not authenticated' });
@@ -52,25 +54,35 @@ router.get('/available-students', authenticateToken, authorizeRoles('STUDENT'), 
       }
     }
 
-    // Get all students who are not already in an active group
-    const availableStudents = await prisma.student.findMany({
-      where: {
-        AND: [
-          { id: { not: studentProfile.id } }, // Exclude current user
-          {
-            OR: [
-              { groupMember: null }, // Students not in any group
-              { 
-                groupMember: {
-                  group: {
-                    status: 'REJECTED' // Students from rejected groups can join new groups
-                  }
+    // Build the where clause
+    let whereClause = {
+      AND: [
+        { id: { not: studentProfile.id } }, // Exclude current user
+        {
+          OR: [
+            { groupMember: null }, // Students not in any group
+            { 
+              groupMember: {
+                group: {
+                  status: 'REJECTED' // Students from rejected groups can join new groups
                 }
               }
-            ]
-          }
-        ]
-      },
+            }
+          ]
+        }
+      ]
+    };
+
+    // Filter by same semester if requested (default behavior)
+    if (includeSameSemesterOnly === 'true' && studentProfile.semester) {
+      whereClause.AND.push({
+        semester: studentProfile.semester
+      });
+    }
+
+    // Get all students who are not already in an active group
+    const availableStudents = await prisma.student.findMany({
+      where: whereClause,
       include: {
         user: {
           select: { id: true, name: true, email: true }
@@ -83,7 +95,11 @@ router.get('/available-students', authenticateToken, authorizeRoles('STUDENT'), 
       ]
     });
 
-    res.json({ students: availableStudents });
+    res.json({ 
+      students: availableStudents,
+      currentUserSemester: studentProfile.semester,
+      filteredBySemester: includeSameSemesterOnly === 'true'
+    });
   } catch (error) {
     console.error('Get available students error:', error);
     res.status(500).json({ message: 'Server error' });

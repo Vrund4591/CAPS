@@ -204,6 +204,11 @@ const StudentCard = React.memo(({
           </h3>
           <p className="text-sm text-gray-600">{student.enrollmentNo}</p>
           <p className="text-sm text-gray-600">{student.class} - {student.division}</p>
+          {student.semester && (
+            <p className="text-xs text-blue-600 font-semibold">
+              📚 Semester {student.semester}
+            </p>
+          )}
         </div>
       </div>
       {isSelectionDisabled && !isSelected && (
@@ -277,7 +282,7 @@ const CreateGroup = ({ user, onLogout }) => {
   const [faculty, setFaculty] = useState([]);
   const [availableStudents, setAvailableStudents] = useState([]);
   const [loading, setLoading] = useState(false);
-  const [dataLoading, setDataLoading] = useState(true); // Add separate loading for initial data
+  const [dataLoading, setDataLoading] = useState(true);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
   const [isEditing, setIsEditing] = useState(false);
@@ -422,7 +427,7 @@ const CreateGroup = ({ user, onLogout }) => {
         console.error('Faculty fetch error:', facultyError);
       }
 
-      // Fetch available students with retry logic
+      // Fetch available students
       let retryCount = 0;
       const maxRetries = 3;
       
@@ -469,6 +474,13 @@ const CreateGroup = ({ user, onLogout }) => {
       setError('Failed to load data. Please refresh the page or try again later.');
     }
   };
+
+  // Add effect to refetch students when semester filter changes
+  useEffect(() => {
+    if (!isEditing) {
+      fetchData();
+    }
+  }, []);
 
   const handleInputChange = (e) => {
     setFormData({
@@ -812,6 +824,7 @@ const CreateGroup = ({ user, onLogout }) => {
                       onSearchChange={handleSearchChange}
                       onClearSearch={clearSearch}
                     />
+                    
                     {/* Optimized Search Results Info */}
                     <SearchResultsInfo
                       searchTerm={searchTerm}
@@ -854,12 +867,26 @@ const CreateGroup = ({ user, onLogout }) => {
                       <User className="w-12 h-12" />
                     </div>
                     <p className="font-semibold mb-2">
-                      {dataLoading ? 'Loading students...' : 'No available students found'}
+                      {dataLoading ? 'Loading students...' : 
+                       sameSemesterOnly && currentUserSemester ? 
+                       `No available students found in Semester ${currentUserSemester}` :
+                       'No available students found'}
                     </p>
                     <p className="text-sm">
-                      {dataLoading ? 'Please wait while we load the student list' : 'All students may already be in groups'}
+                      {dataLoading ? 'Please wait while we load the student list' : 
+                       sameSemesterOnly ? 'Try expanding to show students from all semesters' :
+                       'All students may already be in groups'}
                     </p>
-                    {!dataLoading && (
+                    {!dataLoading && sameSemesterOnly && (
+                      <button
+                        type="button"
+                        onClick={handleToggleSemesterFilter}
+                        className="mt-3 bg-blue-500 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-600 transition-colors"
+                      >
+                        Show All Students
+                      </button>
+                    )}
+                    {!dataLoading && !sameSemesterOnly && (
                       <button
                         type="button"
                         onClick={fetchData}
@@ -947,3 +974,4 @@ const CreateGroup = ({ user, onLogout }) => {
 };
 
 export default React.memo(CreateGroup);
+                  
