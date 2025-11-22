@@ -18,10 +18,12 @@ const PORT = process.env.PORT || 5001;
 // Email transporter configuration
 const createEmailTransporter = () => {
   return nodemailer.createTransport({
-    service: 'gmail', // or your preferred email service
+    host: process.env.MAIL_HOST,
+    port: parseInt(process.env.EMAIL_PORT || 587),
+    secure: false, // true for 465, false for other ports
     auth: {
       user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS // Use app password for Gmail
+      pass: process.env.EMAIL_PASSWORD // Use app password for Gmail
     }
   });
 };

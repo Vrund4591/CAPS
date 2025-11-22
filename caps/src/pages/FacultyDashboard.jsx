@@ -27,6 +27,7 @@ import {
 import Header from '../components/Header';
 import AnnouncementModal from '../components/AnnouncementModal';
 import GroupEditModal from '../components/GroupEditModal';
+import GroupGradingModal from '../components/GroupGradingModal';
 import { useToast } from '../context/ToastContext';
 
 const FacultyDashboard = ({ user, onLogout }) => {
@@ -49,6 +50,10 @@ const FacultyDashboard = ({ user, onLogout }) => {
   const [showAnnouncementModal, setShowAnnouncementModal] = useState(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [editingGroup, setEditingGroup] = useState(null);
+  const [showGradingModal, setShowGradingModal] = useState(false);
+  const [gradingGroup, setGradingGroup] = useState(null);
+  const [presentationSlot, setPresentationSlot] = useState('PRESENTATION_1');
+  const [showGradingStats, setShowGradingStats] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -150,6 +155,12 @@ const FacultyDashboard = ({ user, onLogout }) => {
   const handleGroupUpdated = (updatedGroup) => {
     // Refresh the dashboard data
     fetchDashboardData();
+  };
+
+  const handleGradeGroup = (group, slot = 'PRESENTATION_1') => {
+    setGradingGroup(group);
+    setPresentationSlot(slot);
+    setShowGradingModal(true);
   };
 
   // Filter and sort groups
@@ -630,6 +641,14 @@ const FacultyDashboard = ({ user, onLogout }) => {
                                     </button>
                                   </>
                                 )}
+                                {group.status === 'ACTIVE' && (
+                                  <button
+                                    onClick={() => handleGradeGroup(group)}
+                                    className="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-1 px-3 rounded-xl text-xs"
+                                  >
+                                    Grade
+                                  </button>
+                                )}
                               </div>
                             </td>
                           </tr>
@@ -835,6 +854,18 @@ const FacultyDashboard = ({ user, onLogout }) => {
         }}
         group={editingGroup}
         onGroupUpdated={handleGroupUpdated}
+      />
+
+      {/* Grading Modal */}
+      <GroupGradingModal
+        isOpen={showGradingModal}
+        onClose={() => {
+          setShowGradingModal(false);
+          setGradingGroup(null);
+        }}
+        group={gradingGroup}
+        presentationSlot={presentationSlot}
+        onGradeSubmitted={fetchDashboardData}
       />
 
       {/* Announcement Modal */}

@@ -867,26 +867,13 @@ const CreateGroup = ({ user, onLogout }) => {
                       <User className="w-12 h-12" />
                     </div>
                     <p className="font-semibold mb-2">
-                      {dataLoading ? 'Loading students...' : 
-                       sameSemesterOnly && currentUserSemester ? 
-                       `No available students found in Semester ${currentUserSemester}` :
-                       'No available students found'}
+                      {dataLoading ? 'Loading students...' : 'No available students found'}
                     </p>
                     <p className="text-sm">
                       {dataLoading ? 'Please wait while we load the student list' : 
-                       sameSemesterOnly ? 'Try expanding to show students from all semesters' :
                        'All students may already be in groups'}
                     </p>
-                    {!dataLoading && sameSemesterOnly && (
-                      <button
-                        type="button"
-                        onClick={handleToggleSemesterFilter}
-                        className="mt-3 bg-blue-500 text-white px-4 py-2 rounded-lg font-bold hover:bg-blue-600 transition-colors"
-                      >
-                        Show All Students
-                      </button>
-                    )}
-                    {!dataLoading && !sameSemesterOnly && (
+                    {!dataLoading && (
                       <button
                         type="button"
                         onClick={fetchData}

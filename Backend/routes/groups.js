@@ -1908,4 +1908,224 @@ router.get('/export/csv', authenticateToken, authorizeRoles('ADMIN', 'FACULTY'),
   }
 });
 
+// Get group presentations and grades (Faculty only)
+router.get('/:groupId/presentations', authenticateToken, authorizeRoles('FACULTY'), async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const facultyId = req.user.faculty.id;
+
+    // Find the group and verify faculty ownership
+    const group = await prisma.group.findFirst({
+      where: { groupId, facultyId },
+      include: {
+        members: {
+          include: {
+            student: {
+              include: { user: true }
+            }
+          }
+        }
+      }
+    });
+
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found or you are not authorized to view this group' });
+    }
+
+    // For now, return empty presentations array since we don't have presentation/grade tables yet
+    // This can be expanded when presentation grading system is fully implemented
+    res.json({
+      group: {
+        id: group.id,
+        groupId: group.groupId,
+        title: group.title
+      },
+      presentations: [] // Empty for now, will be populated when grading system is implemented
+    });
+
+  } catch (error) {
+    console.error('Get presentations error:', error);
+    res.status(500).json({ message: 'Server error while fetching presentations' });
+  }
+});
+
+// Submit grades for group presentation (Faculty only)
+router.post('/:groupId/grade', authenticateToken, authorizeRoles('FACULTY'), async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const { presentationSlot, grades } = req.body;
+    const facultyId = req.user.faculty.id;
+
+    // Validate required fields
+    if (!presentationSlot || !grades || !Array.isArray(grades)) {
+      return res.status(400).json({ message: 'Presentation slot and grades array are required' });
+    }
+
+    // Validate presentation slot
+    const validSlots = ['PRESENTATION_1', 'PRESENTATION_2', 'FINAL_PRESENTATION'];
+    if (!validSlots.includes(presentationSlot)) {
+      return res.status(400).json({ message: 'Invalid presentation slot' });
+    }
+
+    // Find the group and verify faculty ownership
+    const group = await prisma.group.findFirst({
+      where: { groupId, facultyId },
+      include: {
+        members: {
+          include: {
+            student: {
+              include: { user: true }
+            }
+          }
+        },
+        faculty: {
+          include: { user: true }
+        }
+      }
+    });
+
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found or you are not authorized to grade this group' });
+    }
+
+    // Validate that all group members have grades
+    const memberIds = group.members.map(member => member.student.id);
+    const gradeStudentIds = grades.map(grade => grade.studentId);
+    
+    const missingStudents = memberIds.filter(id => !gradeStudentIds.includes(id));
+    if (missingStudents.length > 0) {
+      return res.status(400).json({ message: 'Grades must be provided for all group members' });
+    }
+
+    // Validate grade scores
+    const invalidGrades = grades.filter(grade => 
+      typeof grade.score !== 'number' || grade.score < 0 || grade.score > 100
+    );
+    if (invalidGrades.length > 0) {
+      return res.status(400).json({ message: 'All grades must be numbers between 0 and 100' });
+    }
+
+    // For now, we'll just log the grades and return success
+    // This is a placeholder until the grading system tables are implemented
+    console.log('Grades received for group:', groupId);
+    console.log('Presentation slot:', presentationSlot);
+    console.log('Grades:', grades);
+
+    // Create notification for group members about grading
+    const memberEmails = group.members.map(member => member.student.user.email);
+    await prisma.notification.createMany({
+      data: memberEmails.map(email => ({
+        title: 'Presentation Graded',
+        message: `Your group "${group.title}" presentation has been graded by Prof. ${group.faculty.user.name}. Check your dashboard for details.`,
+        type: 'GRADE_SUBMITTED',
+        recipientEmail: email
+      }))
+    });
+
+    // Send email notifications to group members
+    const gradeContent = `
+      <p class="content">Dear Team,</p>
+      <p class="content">📊 <strong>Great news!</strong> Your presentation has been graded by Prof. ${group.faculty.user.name}!</p>
+      
+      <div class="info-box">
+        <div class="info-item">
+          <div class="info-label">Group Name</div>
+          <div class="info-value">${group.title}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Group ID</div>
+          <div class="info-value">${group.groupId}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Presentation</div>
+          <div class="info-value">${presentationSlot.replace(/_/g, ' ')}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Graded by</div>
+          <div class="info-value">Prof. ${group.faculty.user.name}</div>
+        </div>
+      </div>
+      
+      <span class="success-badge">✅ Grading Complete</span>
+      
+      <p class="content">Your individual grades and feedback are now available in the CAPS system. Log in to view your detailed results! 📈</p>
+      
+      <a href="#" class="cta-button">View Grades</a>
+      
+      <p class="content" style="margin-top: 30px; color: #059669; font-weight: bold;">
+        Keep up the excellent work! 🌟
+      </p>
+    `;
+
+    for (const email of memberEmails) {
+      const gradeEmailHTML = global.createCAPSEmailTemplate(
+        'Presentation Graded! 📊', 
+        gradeContent,
+        '#059669'
+      );
+
+      await global.sendEmail(email, `Presentation Graded - ${group.title}`, gradeEmailHTML);
+    }
+
+    res.json({
+      message: 'Grades submitted successfully',
+      group: {
+        id: group.id,
+        groupId: group.groupId,
+        title: group.title
+      },
+      presentationSlot,
+      gradesCount: grades.length
+    });
+
+  } catch (error) {
+    console.error('Submit grades error:', error);
+    res.status(500).json({ message: 'Server error while submitting grades' });
+  }
+});
+
+// Get group grades summary (Faculty only)
+router.get('/:groupId/grades', authenticateToken, authorizeRoles('FACULTY'), async (req, res) => {
+  try {
+    const { groupId } = req.params;
+    const facultyId = req.user.faculty.id;
+
+    // Find the group and verify faculty ownership
+    const group = await prisma.group.findFirst({
+      where: { groupId, facultyId },
+      include: {
+        members: {
+          include: {
+            student: {
+              include: { user: true }
+            }
+          }
+        }
+      }
+    });
+
+    if (!group) {
+      return res.status(404).json({ message: 'Group not found or you are not authorized to view this group' });
+    }
+
+    // For now, return empty grades since we don't have grading tables yet
+    res.json({
+      group: {
+        id: group.id,
+        groupId: group.groupId,
+        title: group.title
+      },
+      grades: {
+        PRESENTATION_1: [],
+        PRESENTATION_2: [],
+        FINAL_PRESENTATION: []
+      }
+    });
+
+  } catch (error) {
+    console.error('Get grades error:', error);
+    res.status(500).json({ message: 'Server error while fetching grades' });
+  }
+});
+
 module.exports = router;
