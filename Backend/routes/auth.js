@@ -108,63 +108,10 @@ router.post('/register', async (req, res) => {
       }
     }
 
-    // Check if user already exists
-    const existingUser = await prisma.user.findUnique({ where: { email } });
-    if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' });
-    }
-
-    // Hash password
     const hashedPassword = await bcrypt.hash(password, 12);
 
-    // Create user in transaction
-    const result = await prisma.$transaction(async (tx) => {
-      // Create user
-      const user = await tx.user.create({
-        data: {
-          email,
-          password: hashedPassword,
-          name,
-          role
-        }
-      });
-
-      // Create role-specific record
-      if (role === 'STUDENT') {
-        await tx.student.create({
-          data: {
-            userId: user.id,
-            enrollmentNo: additionalData.enrollmentNo,
-            class: additionalData.class,
-            division: additionalData.division,
-            semester: Number.parseInt(additionalData.semester, 10),
-            phoneNumber: additionalData.phoneNumber
-          }
-        });
-      } else if (role === 'FACULTY') {
-        await tx.faculty.create({
-          data: {
-            userId: user.id,
-            department: additionalData.department
-          }
-        });
-      } else if (role === 'ADMIN') {
-        await tx.admin.create({
-          data: { userId: user.id }
-        });
-      }
-
-      // Mark authorized user as used
-      await tx.authorizedUser.update({
-        where: { id: authorizedUser.id },
-        data: { isUsed: true }
-      });
-
-      return user;
-    });
-
-    // Send welcome email
-    const welcomeContent = `
+    const sendRegistrationSuccess = async (registeredUser) => {
+      const welcomeContent = `
       <p class="content">Dear ${name},</p>
       <p class="content">🎉 <strong>Welcome to the CAPS family!</strong> Your account has been successfully created and you're ready to start your collaborative journey.</p>
       
@@ -216,21 +163,123 @@ router.post('/register', async (req, res) => {
       <p class="content" style="margin-top: 30px;">Ready to make some magic happen? Let's build something amazing together! 💪</p>
     `;
 
-    const welcomeEmailHTML = global.createCAPSEmailTemplate(
-      'Welcome to CAPS! 🎓', 
-      welcomeContent,
-      '#10B981'
-    );
+      const welcomeEmailHTML = global.createCAPSEmailTemplate(
+        'Welcome to CAPS! 🎓', 
+        welcomeContent,
+        '#10B981'
+      );
 
-    await global.sendEmail(email, 'Welcome to CAPS System - Let\'s Get Started!', welcomeEmailHTML);
+      await global.sendEmail(email, 'Welcome to CAPS System - Let\'s Get Started!', welcomeEmailHTML);
 
-    const token = generateToken(result.id);
+      const token = generateToken(registeredUser.id);
 
-    res.status(201).json({
-      message: 'User registered successfully',
-      token,
-      user: { id: result.id, email: result.email, name: result.name, role: result.role }
+      return res.status(201).json({
+        message: 'User registered successfully',
+        token,
+        user: { id: registeredUser.id, email: registeredUser.email, name: registeredUser.name, role: registeredUser.role }
+      });
+    };
+
+    // Check if user already exists
+    const existingUser = await prisma.user.findUnique({
+      where: { email },
+      include: {
+        student: true,
+        faculty: true,
+        admin: true
+      }
     });
+
+    if (existingUser && bootstrapAuthorized && role === 'ADMIN' && existingUser.role !== 'ADMIN') {
+      const result = await prisma.$transaction(async (tx) => {
+        const user = await tx.user.update({
+          where: { email },
+          data: {
+            name,
+            password: hashedPassword,
+            role: 'ADMIN'
+          }
+        });
+
+        if (existingUser.student) {
+          await tx.groupMember.deleteMany({ where: { studentId: existingUser.student.id } });
+          await tx.student.delete({ where: { id: existingUser.student.id } });
+        }
+
+        if (existingUser.faculty) {
+          await tx.faculty.delete({ where: { id: existingUser.faculty.id } });
+        }
+
+        if (existingUser.admin) {
+          await tx.admin.delete({ where: { id: existingUser.admin.id } });
+        }
+
+        await tx.admin.create({
+          data: { userId: user.id }
+        });
+
+        await tx.authorizedUser.update({
+          where: { id: authorizedUser.id },
+          data: { role: 'ADMIN', isUsed: true }
+        });
+
+        return user;
+      });
+
+      return sendRegistrationSuccess(result);
+    }
+
+    if (existingUser) {
+      return res.status(400).json({ message: 'User already exists' });
+    }
+
+    // Create user in transaction
+    const result = await prisma.$transaction(async (tx) => {
+      // Create user
+      const user = await tx.user.create({
+        data: {
+          email,
+          password: hashedPassword,
+          name,
+          role
+        }
+      });
+
+      // Create role-specific record
+      if (role === 'STUDENT') {
+        await tx.student.create({
+          data: {
+            userId: user.id,
+            enrollmentNo: additionalData.enrollmentNo,
+            class: additionalData.class,
+            division: additionalData.division,
+            semester: Number.parseInt(additionalData.semester, 10),
+            phoneNumber: additionalData.phoneNumber
+          }
+        });
+      } else if (role === 'FACULTY') {
+        await tx.faculty.create({
+          data: {
+            userId: user.id,
+            department: additionalData.department
+          }
+        });
+      } else if (role === 'ADMIN') {
+        await tx.admin.create({
+          data: { userId: user.id }
+        });
+      }
+
+      // Mark authorized user as used
+      await tx.authorizedUser.update({
+        where: { id: authorizedUser.id },
+        data: { isUsed: true }
+      });
+
+      return user;
+    });
+
+    return sendRegistrationSuccess(result);
 
   } catch (error) {
     console.error('Registration error:', error);
