@@ -16,6 +16,30 @@ router.post('/register', async (req, res) => {
   try {
     const { email, password, name, role, ...additionalData } = req.body;
 
+    if (!email || !password || !name || !role) {
+      return res.status(400).json({ message: 'Email, password, name, and role are required' });
+    }
+
+    if (!['STUDENT', 'FACULTY', 'ADMIN'].includes(role)) {
+      return res.status(400).json({ message: 'Invalid role' });
+    }
+
+    if (role === 'STUDENT') {
+      const semester = Number.parseInt(additionalData.semester, 10);
+
+      if (!additionalData.enrollmentNo || !additionalData.class || !additionalData.division || !additionalData.phoneNumber) {
+        return res.status(400).json({ message: 'Student registration requires enrollment number, class, division, and phone number' });
+      }
+
+      if (Number.isNaN(semester)) {
+        return res.status(400).json({ message: 'Student semester is required' });
+      }
+    }
+
+    if (role === 'FACULTY' && !additionalData.department) {
+      return res.status(400).json({ message: 'Faculty registration requires a department' });
+    }
+
     // Check if user is authorized to register
     const authorizedUser = await prisma.authorizedUser.findFirst({
       where: { email, role, isUsed: false }
@@ -57,7 +81,7 @@ router.post('/register', async (req, res) => {
             enrollmentNo: additionalData.enrollmentNo,
             class: additionalData.class,
             division: additionalData.division,
-            semester: parseInt(additionalData.semester),
+            semester: Number.parseInt(additionalData.semester, 10),
             phoneNumber: additionalData.phoneNumber
           }
         });
