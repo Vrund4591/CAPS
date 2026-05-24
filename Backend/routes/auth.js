@@ -15,15 +15,28 @@ const getAllowedEmails = (envKey) => {
   );
 };
 
+const matchesAllowlistEntry = (email, entry) => {
+  if (entry.startsWith('@')) {
+    return email.endsWith(entry);
+  }
+
+  return email === entry;
+};
+
 const isBootstrapAuthorized = (email, role) => {
   const normalizedEmail = email.trim().toLowerCase();
+  const adminAllowlist = (process.env.AUTHORIZED_ADMIN_EMAILS || '')
+    .split(',')
+    .map((entry) => entry.trim().toLowerCase())
+    .filter(Boolean);
+  const facultyAllowlist = getAllowedEmails('AUTHORIZED_FACULTY_EMAILS');
 
   if (role === 'ADMIN') {
-    return getAllowedEmails('AUTHORIZED_ADMIN_EMAILS').has(normalizedEmail);
+    return adminAllowlist.some((entry) => matchesAllowlistEntry(normalizedEmail, entry));
   }
 
   if (role === 'FACULTY') {
-    return getAllowedEmails('AUTHORIZED_FACULTY_EMAILS').has(normalizedEmail);
+    return facultyAllowlist.has(normalizedEmail);
   }
 
   return false;
