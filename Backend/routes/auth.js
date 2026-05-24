@@ -78,11 +78,13 @@ router.post('/register', async (req, res) => {
 
     // Check if user is authorized to register
     let authorizedUser = await prisma.authorizedUser.findFirst({
-      where: { email, role, isUsed: false }
+      where: { email, isUsed: false }
     });
 
+    const bootstrapAuthorized = isBootstrapAuthorized(email, role);
+
     if (!authorizedUser) {
-      if (isBootstrapAuthorized(email, role)) {
+      if (bootstrapAuthorized) {
         authorizedUser = await prisma.authorizedUser.create({
           data: { email, role }
         });
@@ -90,6 +92,18 @@ router.post('/register', async (req, res) => {
         return res.status(403).json({ 
           message: 'Registration requires pre-authorization. Please contact your administrator to authorize your email address for registration.',
           details: 'Your email must be pre-authorized by an administrator before you can create an account.'
+        });
+      }
+    } else if (authorizedUser.role !== role) {
+      if (bootstrapAuthorized) {
+        authorizedUser = await prisma.authorizedUser.update({
+          where: { id: authorizedUser.id },
+          data: { role }
+        });
+      } else {
+        return res.status(403).json({
+          message: `Registration is authorized for ${authorizedUser.role} only.`,
+          details: `This email is already authorized for ${authorizedUser.role}.`
         });
       }
     }
