@@ -4,7 +4,7 @@
   "description": "CAPS - Collaborative Assignment and Project System Backend",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "prisma migrate deploy && node server.js",
     "dev": "nodemon server.js",
     "prisma:generate": "prisma generate",
     "prisma:migrate": "prisma migrate dev",
