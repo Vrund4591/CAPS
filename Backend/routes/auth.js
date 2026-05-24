@@ -6,6 +6,29 @@ const { authenticateToken } = require('../middleware/auth');
 
 const router = express.Router();
 
+const getAllowedEmails = (envKey) => {
+  return new Set(
+    (process.env[envKey] || '')
+      .split(',')
+      .map((email) => email.trim().toLowerCase())
+      .filter(Boolean)
+  );
+};
+
+const isBootstrapAuthorized = (email, role) => {
+  const normalizedEmail = email.trim().toLowerCase();
+
+  if (role === 'ADMIN') {
+    return getAllowedEmails('AUTHORIZED_ADMIN_EMAILS').has(normalizedEmail);
+  }
+
+  if (role === 'FACULTY') {
+    return getAllowedEmails('AUTHORIZED_FACULTY_EMAILS').has(normalizedEmail);
+  }
+
+  return false;
+};
+
 // Generate JWT token
 const generateToken = (userId) => {
   return jwt.sign({ userId }, process.env.JWT_SECRET, { expiresIn: '24h' });
@@ -41,15 +64,21 @@ router.post('/register', async (req, res) => {
     }
 
     // Check if user is authorized to register
-    const authorizedUser = await prisma.authorizedUser.findFirst({
+    let authorizedUser = await prisma.authorizedUser.findFirst({
       where: { email, role, isUsed: false }
     });
 
     if (!authorizedUser) {
-      return res.status(403).json({ 
-        message: 'Registration requires pre-authorization. Please contact your administrator to authorize your email address for registration.',
-        details: 'Your email must be pre-authorized by an administrator before you can create an account.'
-      });
+      if (isBootstrapAuthorized(email, role)) {
+        authorizedUser = await prisma.authorizedUser.create({
+          data: { email, role }
+        });
+      } else {
+        return res.status(403).json({ 
+          message: 'Registration requires pre-authorization. Please contact your administrator to authorize your email address for registration.',
+          details: 'Your email must be pre-authorized by an administrator before you can create an account.'
+        });
+      }
     }
 
     // Check if user already exists
