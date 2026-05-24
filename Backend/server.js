@@ -31,6 +31,20 @@ const createEmailTransporter = () => {
 // Make email transporter available globally
 global.emailTransporter = createEmailTransporter();
 
+const verifyEmailTransporter = async () => {
+    try {
+        if (!process.env.EMAIL_USER || !process.env.EMAIL_PASSWORD || !process.env.MAIL_HOST) {
+            console.warn('Email transporter not fully configured. Missing MAIL_HOST/EMAIL_USER/EMAIL_PASSWORD.');
+            return;
+        }
+
+        await global.emailTransporter.verify();
+        console.log('Email transporter verified successfully');
+    } catch (error) {
+        console.error('Email transporter verification failed:', error.message || error);
+    }
+};
+
 // CAPS Platform Email Template
 global.createCAPSEmailTemplate = (title, content, accentColor = '#4F46E5') => {
   return `
@@ -252,7 +266,7 @@ global.createCAPSEmailTemplate = (title, content, accentColor = '#4F46E5') => {
 global.sendEmail = async (to, subject, htmlContent) => {
   try {
     const mailOptions = {
-      from: `"CAPS System 🎓" <${process.env.EMAIL_USER}>`,
+            from: process.env.EMAIL_FROM || `"CAPS System 🎓" <${process.env.EMAIL_USER}>`,
       to,
       subject: `🎯 ${subject}`,
       html: htmlContent
@@ -281,5 +295,7 @@ app.get('/health', (req, res) => {
 });
 
 app.listen(PORT, () => {
+    console.log(`Deploy commit: ${process.env.RENDER_GIT_COMMIT || 'local-dev'}`);
   console.log(`Server running on port ${PORT}`);
+    verifyEmailTransporter();
 });
