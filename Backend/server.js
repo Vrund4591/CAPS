@@ -16,20 +16,31 @@ const PORT = process.env.PORT || 5001;
 // npm install multer csv-parse
 
 // Email transporter configuration
-const createEmailTransporter = () => {
+const createEmailTransporter = ({ port, secure }) => {
+    const resolvedPort = port || Number.parseInt(process.env.EMAIL_PORT || process.env.MAIL_PORT || '587', 10);
+    const resolvedSecure = typeof secure === 'boolean' ? secure : resolvedPort === 465;
+
   return nodemailer.createTransport({
     host: process.env.MAIL_HOST,
-    port: parseInt(process.env.EMAIL_PORT || 587),
-    secure: false, // true for 465, false for other ports
+        port: resolvedPort,
+        secure: resolvedSecure,
     auth: {
       user: process.env.EMAIL_USER,
       pass: process.env.EMAIL_PASSWORD // Use app password for Gmail
-    }
+        },
+        connectionTimeout: Number.parseInt(process.env.SMTP_CONNECTION_TIMEOUT_MS || '10000', 10),
+        greetingTimeout: Number.parseInt(process.env.SMTP_GREETING_TIMEOUT_MS || '10000', 10),
+        socketTimeout: Number.parseInt(process.env.SMTP_SOCKET_TIMEOUT_MS || '20000', 10),
+        dnsTimeout: Number.parseInt(process.env.SMTP_DNS_TIMEOUT_MS || '10000', 10),
   });
 };
 
 // Make email transporter available globally
-global.emailTransporter = createEmailTransporter();
+const defaultSmtpPort = Number.parseInt(process.env.EMAIL_PORT || process.env.MAIL_PORT || '587', 10);
+global.emailTransporter = createEmailTransporter({ port: defaultSmtpPort, secure: defaultSmtpPort === 465 });
+global.fallbackEmailTransporter = defaultSmtpPort === 465
+    ? null
+    : createEmailTransporter({ port: 465, secure: true });
 
 const verifyEmailTransporter = async () => {
     try {
@@ -39,10 +50,24 @@ const verifyEmailTransporter = async () => {
         }
 
         await global.emailTransporter.verify();
-        console.log('Email transporter verified successfully');
+        console.log('Primary email transporter verified successfully');
     } catch (error) {
-        console.error('Email transporter verification failed:', error.message || error);
+        console.error('Primary email transporter verification failed:', error.message || error);
+
+        if (global.fallbackEmailTransporter) {
+            try {
+                await global.fallbackEmailTransporter.verify();
+                console.log('Fallback email transporter verified successfully (port 465)');
+            } catch (fallbackError) {
+                console.error('Fallback email transporter verification failed:', fallbackError.message || fallbackError);
+            }
+        }
     }
+};
+
+const isRetryableEmailError = (error) => {
+    const retryableCodes = new Set(['ETIMEDOUT', 'ECONNECTION', 'ESOCKET']);
+    return retryableCodes.has(error?.code);
 };
 
 // CAPS Platform Email Template
@@ -264,18 +289,30 @@ global.createCAPSEmailTemplate = (title, content, accentColor = '#4F46E5') => {
 
 // Email sending utility
 global.sendEmail = async (to, subject, htmlContent) => {
-  try {
     const mailOptions = {
-            from: process.env.EMAIL_FROM || `"CAPS System 🎓" <${process.env.EMAIL_USER}>`,
-      to,
-      subject: `🎯 ${subject}`,
-      html: htmlContent
+        from: process.env.EMAIL_FROM || `"CAPS System 🎓" <${process.env.EMAIL_USER}>`,
+        to,
+        subject: `🎯 ${subject}`,
+        html: htmlContent
     };
-    
+
+  try {
     await global.emailTransporter.sendMail(mailOptions);
     console.log(`Email sent successfully to ${to}`);
   } catch (error) {
-    console.error('Email sending error:', error);
+        if (global.fallbackEmailTransporter && isRetryableEmailError(error)) {
+            try {
+                console.warn(`Primary SMTP failed (${error.code}). Retrying with fallback transporter...`);
+                await global.fallbackEmailTransporter.sendMail(mailOptions);
+                console.log(`Email sent successfully to ${to} via fallback transporter`);
+                return;
+            } catch (fallbackError) {
+                console.error('Email sending failed on fallback transporter:', fallbackError);
+                return;
+            }
+        }
+
+        console.error('Email sending error:', error);
   }
 };
 
