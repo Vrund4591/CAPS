@@ -77,8 +77,8 @@ router.post('/register', async (req, res) => {
     }
 
     // Check if user is authorized to register
-    let authorizedUser = await prisma.authorizedUser.findFirst({
-      where: { email, isUsed: false }
+    let authorizedUser = await prisma.authorizedUser.findUnique({
+      where: { email }
     });
 
     const bootstrapAuthorized = isBootstrapAuthorized(email, role);
@@ -97,8 +97,8 @@ router.post('/register', async (req, res) => {
     } else if (authorizedUser.role !== role) {
       if (bootstrapAuthorized) {
         authorizedUser = await prisma.authorizedUser.update({
-          where: { id: authorizedUser.id },
-          data: { role }
+          where: { email },
+          data: { role, isUsed: false }
         });
       } else {
         return res.status(403).json({
