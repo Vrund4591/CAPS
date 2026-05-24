@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import Header from '../components/Header';
 import { useToast } from '../context/ToastContext';
+import { apiUrl } from '../utils/api';
 
 // Memoized Search Bar component to prevent unnecessary re-renders
 const SearchBar = React.memo(({ 
@@ -318,7 +319,7 @@ const CreateGroup = ({ user, onLogout }) => {
   const fetchGroupForEditing = async (groupId) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/groups/my-group', {
+      const response = await fetch(apiUrl('/api/groups/my-group'), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -361,12 +362,12 @@ const CreateGroup = ({ user, onLogout }) => {
       const token = localStorage.getItem('token');
       
       // Fetch available students
-      const studentsResponse = await fetch('http://localhost:5001/api/groups/available-students', {
+      const studentsResponse = await fetch(apiUrl('/api/groups/available-students'), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
       // Fetch students from the rejected group
-      const rejectedGroupResponse = await fetch('http://localhost:5001/api/groups/rejected-group-members', {
+      const rejectedGroupResponse = await fetch(apiUrl('/api/groups/rejected-group-members'), {
         method: 'POST',
         headers: { 
           'Authorization': `Bearer ${token}`,
@@ -414,7 +415,7 @@ const CreateGroup = ({ user, onLogout }) => {
 
       // Fetch faculty
       try {
-        const facultyResponse = await fetch('http://localhost:5001/api/users/faculty', {
+        const facultyResponse = await fetch(apiUrl('/api/users/faculty'), {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (facultyResponse.ok) {
@@ -433,7 +434,7 @@ const CreateGroup = ({ user, onLogout }) => {
       
       while (retryCount < maxRetries) {
         try {
-          const studentsResponse = await fetch('http://localhost:5001/api/groups/available-students', {
+          const studentsResponse = await fetch(apiUrl('/api/groups/available-students'), {
             headers: { 'Authorization': `Bearer ${token}` }
           });
           
@@ -541,13 +542,13 @@ const CreateGroup = ({ user, onLogout }) => {
       
       // If editing, first delete the old group
       if (isEditing && originalGroup) {
-        await fetch(`http://localhost:5001/api/groups/${originalGroup.groupId}/delete`, {
+        await fetch(apiUrl(`/api/groups/${originalGroup.groupId}/delete`), {
           method: 'DELETE',
           headers: { 'Authorization': `Bearer ${token}` }
         });
       }
       
-      const response = await fetch('http://localhost:5001/api/groups/create', {
+      const response = await fetch(apiUrl('/api/groups/create'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

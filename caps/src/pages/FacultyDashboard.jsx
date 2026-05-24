@@ -29,6 +29,7 @@ import AnnouncementModal from '../components/AnnouncementModal';
 import GroupEditModal from '../components/GroupEditModal';
 import GroupGradingModal from '../components/GroupGradingModal';
 import { useToast } from '../context/ToastContext';
+import { apiUrl } from '../utils/api';
 
 const FacultyDashboard = ({ user, onLogout }) => {
   const [groups, setGroups] = useState([]);
@@ -66,7 +67,7 @@ const FacultyDashboard = ({ user, onLogout }) => {
       
       // Fetch faculty groups
       try {
-        const groupsResponse = await fetch('http://localhost:5001/api/groups', {
+        const groupsResponse = await fetch(apiUrl('/api/groups'), {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         if (groupsResponse.ok) {
@@ -91,7 +92,7 @@ const FacultyDashboard = ({ user, onLogout }) => {
     setActionLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5001/api/groups/${groupId}/status`, {
+      const response = await fetch(apiUrl(`/api/groups/${groupId}/status`), {
         method: 'PATCH',
         headers: {
           'Content-Type': 'application/json',

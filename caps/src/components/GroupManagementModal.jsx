@@ -19,6 +19,7 @@ import {
   UserX
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { apiUrl } from '../utils/api';
 
 const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
   const [groups, setGroups] = useState([]);
@@ -115,7 +116,7 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
         if (!value) params.delete(key);
       });
 
-      const response = await fetch(`http://localhost:5001/api/groups/admin/all?${params}`, {
+      const response = await fetch(apiUrl(`/api/groups/admin/all?${params}`), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -126,7 +127,7 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
       } else {
         console.error('Failed to fetch groups:', response.status);
         // Fallback to regular groups endpoint with client-side filtering
-        const fallbackResponse = await fetch('http://localhost:5001/api/groups', {
+        const fallbackResponse = await fetch(apiUrl('/api/groups'), {
           headers: { 'Authorization': `Bearer ${token}` }
         });
         
@@ -190,7 +191,7 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5001/api/groups/admin/${groupId}/force-delete`, {
+      const response = await fetch(apiUrl(`/api/groups/admin/${groupId}/force-delete`), {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -242,7 +243,7 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
         params.append('departments', reminderData.departments.join(','));
       }
 
-      const response = await fetch(`http://localhost:5001/api/groups/admin/students-without-groups?${params}`, {
+      const response = await fetch(apiUrl(`/api/groups/admin/students-without-groups?${params}`), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -260,7 +261,7 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
     setReminderLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/groups/admin/send-group-reminder', {
+      const response = await fetch(apiUrl('/api/groups/admin/send-group-reminder'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -394,7 +395,7 @@ const GroupManagementModal = ({ isOpen, onClose, onGroupUpdated }) => {
       if (projectTypeFilter !== 'ALL') params.append('projectType', projectTypeFilter);
       if (departmentFilter !== 'ALL') params.append('department', departmentFilter);
 
-      const response = await fetch(`http://localhost:5001/api/groups/export/csv?${params}`, {
+      const response = await fetch(apiUrl(`/api/groups/export/csv?${params}`), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 

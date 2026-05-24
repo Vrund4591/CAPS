@@ -12,6 +12,7 @@ import {
   Clipboard
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { apiUrl } from '../utils/api';
 
 const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
   const [formData, setFormData] = useState({
@@ -59,7 +60,7 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/groups/available-students-faculty', {
+      const response = await fetch(apiUrl('/api/groups/available-students-faculty'), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -143,7 +144,7 @@ const GroupEditModal = ({ isOpen, onClose, group, onGroupUpdated }) => {
     try {
       const token = localStorage.getItem('token');
       
-      const response = await fetch(`http://localhost:5001/api/groups/${group.groupId}/update-faculty`, {
+      const response = await fetch(apiUrl(`/api/groups/${group.groupId}/update-faculty`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

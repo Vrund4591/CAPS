@@ -9,6 +9,7 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { apiUrl } from '../utils/api';
 
 const AnnouncementModal = ({ isOpen, onClose, groups, user }) => {
   const [selectedGroups, setSelectedGroups] = useState(new Set());
@@ -45,7 +46,7 @@ const AnnouncementModal = ({ isOpen, onClose, groups, user }) => {
     setLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/groups/emails', {
+      const response = await fetch(apiUrl('/api/groups/emails'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

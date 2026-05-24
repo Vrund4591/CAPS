@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import Header from '../components/Header';
 import { useToast } from '../context/ToastContext';
+import { apiUrl } from '../utils/api';
 
 const MyGroup = ({ user, onLogout }) => {
   const [group, setGroup] = useState(null);
@@ -35,7 +36,7 @@ const MyGroup = ({ user, onLogout }) => {
   const fetchGroupData = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/groups/my-group', {
+      const response = await fetch(apiUrl('/api/groups/my-group'), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -55,7 +56,7 @@ const MyGroup = ({ user, onLogout }) => {
     setDeleteLoading(true);
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5001/api/groups/${group.groupId}/delete`, {
+      const response = await fetch(apiUrl(`/api/groups/${group.groupId}/delete`), {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });

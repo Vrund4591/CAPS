@@ -22,6 +22,7 @@ import {
   Check
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { apiUrl } from '../utils/api';
 
 const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
   const [users, setUsers] = useState([]);
@@ -118,7 +119,7 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
   const fetchUsersWithClientSideFiltering = async (token) => {
     try {
       // Fetch all users without filters for client-side filtering
-      const response = await fetch('http://localhost:5001/api/users/all?limit=1000', {
+      const response = await fetch(apiUrl('/api/users/all?limit=1000'), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -301,7 +302,7 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5001/api/users/${userId}`, {
+      const response = await fetch(apiUrl(`/api/users/${userId}`), {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -328,7 +329,7 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/users/bulk-action', {
+      const response = await fetch(apiUrl('/api/users/bulk-action'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -374,7 +375,7 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/users/bulk-authorize', {
+      const response = await fetch(apiUrl('/api/users/bulk-authorize'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -415,7 +416,7 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/users/create', {
+      const response = await fetch(apiUrl('/api/users/create'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -459,7 +460,7 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5001/api/users/${editForm.id}`, {
+      const response = await fetch(apiUrl(`/api/users/${editForm.id}`), {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -502,7 +503,7 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
   const handleViewUser = async (userId) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5001/api/users/${userId}/details`, {
+      const response = await fetch(apiUrl(`/api/users/${userId}/details`), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -552,7 +553,7 @@ const UserManagementModal = ({ isOpen, onClose, onUserUpdated }) => {
       if (semesterFilter !== 'ALL') params.append('semester', semesterFilter);
       if (searchTerm.trim()) params.append('search', searchTerm.trim());
 
-      const response = await fetch(`http://localhost:5001/api/users/export/csv?${params}`, {
+      const response = await fetch(apiUrl(`/api/users/export/csv?${params}`), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 

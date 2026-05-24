@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Target, Users, Trophy, BookOpen, Coffee, Zap, Star, Code, Calendar, Award } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { apiUrl } from '../utils/api';
 
 const LandingPage = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
@@ -36,7 +37,7 @@ const LandingPage = ({ onLogin }) => {
 
     try {
       const endpoint = isLogin ? '/api/auth/login' : '/api/auth/register';
-      const response = await fetch(`http://localhost:5001${endpoint}`, {
+      const response = await fetch(apiUrl(endpoint), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json'

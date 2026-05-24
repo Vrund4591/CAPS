@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { apiUrl } from '../utils/api';
 
 const NotificationContext = createContext();
 
@@ -22,7 +23,7 @@ export const NotificationProvider = ({ children }) => {
       const token = localStorage.getItem('token');
       if (!token) return;
 
-      const response = await fetch('http://localhost:5001/api/notifications', {
+      const response = await fetch(apiUrl('/api/notifications'), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -40,7 +41,7 @@ export const NotificationProvider = ({ children }) => {
   const markAsRead = async (notificationId) => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5001/api/notifications/${notificationId}/read`, {
+      const response = await fetch(apiUrl(`/api/notifications/${notificationId}/read`), {
         method: 'PATCH',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -65,7 +66,7 @@ export const NotificationProvider = ({ children }) => {
         return;
       }
 
-      const response = await fetch('http://localhost:5001/api/notifications/mark-all-read', {
+      const response = await fetch(apiUrl('/api/notifications/mark-all-read'), {
         method: 'PATCH',
         headers: { 
           'Authorization': `Bearer ${token}`,

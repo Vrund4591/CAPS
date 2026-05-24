@@ -40,6 +40,7 @@ import UserManagementModal from '../components/UserManagementModal';
 import GroupManagementModal from '../components/GroupManagementModal';
 import SystemAnalyticsModal from '../components/SystemAnalyticsModal';
 import { useToast } from '../context/ToastContext';
+import { apiUrl } from '../utils/api';
 
 const AdminDashboard = ({ user, onLogout }) => {
   const [stats, setStats] = useState({
@@ -96,7 +97,7 @@ const AdminDashboard = ({ user, onLogout }) => {
       const token = localStorage.getItem('token');
       
       // Fetch analytics overview
-      const analyticsResponse = await fetch('http://localhost:5001/api/users/analytics/overview', {
+      const analyticsResponse = await fetch(apiUrl('/api/users/analytics/overview'), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -142,7 +143,7 @@ const AdminDashboard = ({ user, onLogout }) => {
   const fetchAnalytics = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/users/analytics/overview?timeframe=30', {
+      const response = await fetch(apiUrl('/api/users/analytics/overview?timeframe=30'), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -158,7 +159,7 @@ const AdminDashboard = ({ user, onLogout }) => {
   const fetchAuthorizedUsers = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/users/authorized', {
+      const response = await fetch(apiUrl('/api/users/authorized'), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
       
@@ -178,7 +179,7 @@ const AdminDashboard = ({ user, onLogout }) => {
     e.preventDefault();
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/users/authorize', {
+      const response = await fetch(apiUrl('/api/users/authorize'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -212,7 +213,7 @@ const AdminDashboard = ({ user, onLogout }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch(`http://localhost:5001/api/users/authorized/${id}`, {
+      const response = await fetch(apiUrl(`/api/users/authorized/${id}`), {
         method: 'DELETE',
         headers: { 'Authorization': `Bearer ${token}` }
       });
@@ -272,7 +273,7 @@ const AdminDashboard = ({ user, onLogout }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/users/authorize/bulk', {
+      const response = await fetch(apiUrl('/api/users/authorize/bulk'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -381,7 +382,7 @@ const AdminDashboard = ({ user, onLogout }) => {
 
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/users/authorize-csv', {
+      const response = await fetch(apiUrl('/api/users/authorize-csv'), {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`
@@ -424,7 +425,7 @@ const AdminDashboard = ({ user, onLogout }) => {
   const handleExportUsers = async () => {
     try {
       const token = localStorage.getItem('token');
-      const response = await fetch('http://localhost:5001/api/users/export/csv', {
+      const response = await fetch(apiUrl('/api/users/export/csv'), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 

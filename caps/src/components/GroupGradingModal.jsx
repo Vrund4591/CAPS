@@ -10,6 +10,7 @@ import {
   CheckCircle
 } from 'lucide-react';
 import { useToast } from '../context/ToastContext';
+import { apiUrl } from '../utils/api';
 
 const GroupGradingModal = ({ isOpen, onClose, group, presentationSlot = 'PRESENTATION_1', onGradeSubmitted }) => {
   const [grades, setGrades] = useState([]);
@@ -32,7 +33,7 @@ const GroupGradingModal = ({ isOpen, onClose, group, presentationSlot = 'PRESENT
     try {
       const token = localStorage.getItem('token');
       // Fix endpoint to match backend API structure
-      const response = await fetch(`http://localhost:5001/api/groups/${group?.groupId}/presentations`, {
+      const response = await fetch(apiUrl(`/api/groups/${group?.groupId}/presentations`), {
         headers: { 'Authorization': `Bearer ${token}` }
       });
 
@@ -144,7 +145,7 @@ const GroupGradingModal = ({ isOpen, onClose, group, presentationSlot = 'PRESENT
       }
 
       // Fix endpoint to match backend API structure
-      const response = await fetch(`http://localhost:5001/api/groups/${group?.groupId}/grade`, {
+      const response = await fetch(apiUrl(`/api/groups/${group?.groupId}/grade`), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
